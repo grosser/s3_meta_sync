@@ -8,7 +8,8 @@ Install
 Usage
 =====
 
-    CODE EXAMPLE
+    s3-meta-sync <local> <bucket:folder>
+    s3-meta-sync <bucket:folder> <local>
 
 Author
 ======
