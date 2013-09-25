@@ -31,12 +31,11 @@ describe S3MetaSync do
   end
 
   describe "#sync" do
+    let(:syncer) { S3MetaSync::Syncer.new(config) }
     before { upload_simple_structure }
     after { cleanup_s3 }
 
     context "sync local to remote" do
-      let(:syncer) { S3MetaSync::Syncer.new(config) }
-
       it "uploads files" do
         download("bar/xxx").should == "yyy\n"
         download("bar/.s3-meta-sync").should == foo_md5
@@ -57,35 +56,35 @@ describe S3MetaSync do
     end
 
     context "sync remote to local" do
-      let(:syncer) { S3MetaSync::Syncer.new({}) }
+      let(:no_cred_syncer) { S3MetaSync::Syncer.new(:region => config[:region]) }
 
       it "downloads into an empty folder" do
-        syncer.sync("#{config[:bucket]}:bar", "foo2")
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         File.read("foo2/xxx").should == "yyy\n"
         File.read("foo2/.s3-meta-sync").should == foo_md5
       end
 
       it "downloads nothing when everything is up to date" do
-        syncer.should_receive(:download_file).with("bar", ".s3-meta-sync", "foo")
-        syncer.should_not_receive(:delete_local_file)
-        syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.should_receive(:download_file).with("bar", ".s3-meta-sync", "foo")
+        no_cred_syncer.should_not_receive(:delete_local_file)
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
       end
 
       it "deletes obsolete local files" do
         `echo yyy > foo/zzz`
-        syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.exist?("foo/zzz").should == false
       end
 
       it "removes empty folders" do
         `mkdir foo/baz`
-        syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.exist?("foo/baz").should == false
       end
 
       it "overwrites locally changed files" do
         `echo fff > foo/xxx`
-        syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.read("foo/xxx").should == "yyy\n"
       end
     end
@@ -113,7 +112,7 @@ describe S3MetaSync do
     it "works" do
       begin
         `mkdir foo && echo yyy > foo/xxx`
-        sync("foo #{config[:bucket]}:bar --key #{config[:key]} --secret #{config[:secret]}")
+        sync("foo #{config[:bucket]}:bar --key #{config[:key]} --secret #{config[:secret]} --region #{config[:region]}")
         download("bar/xxx").should == "yyy\n"
       ensure
         cleanup_s3

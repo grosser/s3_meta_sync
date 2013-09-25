@@ -89,7 +89,7 @@ module S3MetaSync
     end
 
     def download_content(path)
-      open("https://s3-us-west-2.amazonaws.com/#{@bucket}/#{path}").read
+      open("https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}").read
     end
 
     def download(source, destination)
@@ -109,6 +109,10 @@ module S3MetaSync
       download_file(source, META_FILE, destination)
 
       `find #{destination} -depth -empty -delete`
+    end
+
+    def region
+      @config[:region] unless @config[:region].to_s.empty?
     end
   end
 
@@ -136,6 +140,7 @@ module S3MetaSync
         BANNER
         opts.on("-k", "--key KEY", "AWS access key") { |c| options[:key] = c }
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
+        opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
         opts.on("-v", "--version", "Show Version"){ puts VERSION; exit}
       end.parse!(argv)
