@@ -89,7 +89,10 @@ module S3MetaSync
     end
 
     def download_content(path)
-      open("https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}").read
+      url = "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
+      open(url).read
+    rescue OpenURI::HTTPError
+      raise "Unable to download #{url} -- #{$!}"
     end
 
     def download(source, destination)
