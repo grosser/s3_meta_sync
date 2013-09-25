@@ -1,4 +1,4 @@
-Sync folders with s3 using a metadata file and md5 diffs
+Sync folders with s3 using a metadata file with md5 sums.
 
 Install
 =======
@@ -8,8 +8,22 @@ Install
 Usage
 =====
 
-    s3-meta-sync <local> <bucket:folder>
-    s3-meta-sync <bucket:folder> <local>
+```Bash
+# upload local files and remove everything that is not local
+s3-meta-sync <local> <bucket:folder> --key <aws-access-key> --secret <aws-secret-key>
+
+# download files and remove everything that is not remote
+s3-meta-sync <bucket:folder> <local> # no credentials required
+```
+
+### Options
+
+```
+    -k, --key KEY                    AWS access key
+    -s, --secret SECRET              AWS secret key
+    -h, --help                       Show this.
+    -v, --version                    Show Version
+```
 
 Author
 ======

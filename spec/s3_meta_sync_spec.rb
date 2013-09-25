@@ -1,9 +1,12 @@
 require "spec_helper"
 
+def cleanup_s3
+  s3.objects.each { |o| o.delete }
+end
+
 describe S3MetaSync do
   let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
   let(:s3) { AWS::S3.new(:access_key_id => config[:key], :secret_access_key => config[:secret]).buckets[config[:bucket]] }
-  let(:syncer) { S3MetaSync::Syncer.new(config) }
   let(:foo_md5) { "---\nxxx: 0976fb571ada412514fe67273780c510\n" }
 
   def upload_simple_structure
@@ -17,23 +20,22 @@ describe S3MetaSync do
     nil
   end
 
+  around do |test|
+    Dir.mktmpdir do |dir|
+      Dir.chdir(dir, &test)
+    end
+  end
+
   it "has a VERSION" do
     S3MetaSync::VERSION.should =~ /^[\.\da-z]+$/
   end
 
   describe "#sync" do
-    around do |test|
-      Dir.mktmpdir do |dir|
-        Dir.chdir(dir, &test)
-      end
-    end
-
-    after do
-      s3.objects.each { |o| o.delete }
-    end
+    before { upload_simple_structure }
+    after { cleanup_s3 }
 
     context "sync local to remote" do
-      before { upload_simple_structure }
+      let(:syncer) { S3MetaSync::Syncer.new(config) }
 
       it "uploads files" do
         download("bar/xxx").should == "yyy\n"
@@ -55,13 +57,7 @@ describe S3MetaSync do
     end
 
     context "sync remote to local" do
-      before do
-        upload_simple_structure
-      end
-
-      after do
-        s3.objects.each { |o| o.delete }
-      end
+      let(:syncer) { S3MetaSync::Syncer.new({}) }
 
       it "downloads into an empty folder" do
         syncer.sync("#{config[:bucket]}:bar", "foo2")
@@ -91,6 +87,36 @@ describe S3MetaSync do
         `echo fff > foo/xxx`
         syncer.sync("#{config[:bucket]}:bar", "foo")
         File.read("foo/xxx").should == "yyy\n"
+      end
+    end
+  end
+
+  describe "CLI" do
+    def sync(command, options={})
+      sh("#{Bundler.root}/bin/s3-meta-sync #{command}", options)
+    end
+
+    def sh(command, options={})
+      result = `#{command} #{"2>&1" unless options[:keep_output]}`
+      raise "#{options[:fail] ? "SUCCESS" : "FAIL"} #{command}\n#{result}" if $?.success? == !!options[:fail]
+      result
+    end
+
+    it "shows --version" do
+      sync("--version").should include(S3MetaSync::VERSION)
+    end
+
+    it "shows --help" do
+      sync("--help").should include("Sync folders with s3")
+    end
+
+    it "works" do
+      begin
+        `mkdir foo && echo yyy > foo/xxx`
+        sync("foo #{config[:bucket]}:bar --key #{config[:key]} --secret #{config[:secret]}")
+        download("bar/xxx").should == "yyy\n"
+      ensure
+        cleanup_s3
       end
     end
   end
