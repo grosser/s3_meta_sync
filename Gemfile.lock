@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    s3_meta_sync (0.1.1)
+    s3_meta_sync (0.1.2)
       aws-sdk
       parallel
 
