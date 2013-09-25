@@ -58,6 +58,12 @@ describe S3MetaSync do
     context "sync remote to local" do
       let(:no_cred_syncer) { S3MetaSync::Syncer.new(:region => config[:region]) }
 
+      it "fails when trying to download an empty folder (which would remove everything)" do
+        expect {
+          no_cred_syncer.sync("#{config[:bucket]}:baz", "foo")
+        }.to raise_error(S3MetaSync::RemoteWithoutMeta)
+      end
+
       it "downloads into an empty folder" do
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         File.read("foo2/xxx").should == "yyy\n"

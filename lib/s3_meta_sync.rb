@@ -6,9 +6,10 @@ require "aws/s3"
 require "optparse"
 
 module S3MetaSync
-  class Syncer
-    META_FILE = ".s3-meta-sync"
+  RemoteWithoutMeta = Class.new(Exception)
+  META_FILE = ".s3-meta-sync"
 
+  class Syncer
     def initialize(config)
       @config = config
     end
@@ -28,7 +29,11 @@ module S3MetaSync
     private
 
     def upload(source, destination)
-      remote_info = download_meta(destination)
+      remote_info = begin
+        download_meta(destination)
+      rescue RemoteWithoutMeta
+        {}
+      end
       generate_meta(source)
       local_info = read_meta(source)
 
@@ -78,7 +83,7 @@ module S3MetaSync
       content = download_content("#{destination}/#{META_FILE}")
       YAML.load(content)
     rescue
-      {}
+      raise RemoteWithoutMeta
     end
 
     def download_file(source, path, destination)
