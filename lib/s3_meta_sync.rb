@@ -4,6 +4,7 @@ require "yaml"
 require "digest/md5"
 require "aws/s3"
 require "optparse"
+require "parallel"
 
 module S3MetaSync
   RemoteWithoutMeta = Class.new(Exception)
@@ -37,7 +38,7 @@ module S3MetaSync
       generate_meta(source)
       local_info = read_meta(source)
 
-      in_multiple_threads(local_info) do |path, md5|
+      in_multiple_processes(local_info) do |path, md5|
         next if remote_info[path] == md5
         upload_file(source, path, destination)
       end
@@ -105,7 +106,7 @@ module S3MetaSync
       generate_meta(destination)
       local_info = read_meta(destination) # TODO maybe generate !?
 
-      in_multiple_threads(remote_info) do |path, md5|
+      in_multiple_processes(remote_info) do |path, md5|
         next if local_info[path] == md5
         download_file(source, path, destination)
       end
@@ -123,16 +124,9 @@ module S3MetaSync
       @config[:region] unless @config[:region].to_s.empty?
     end
 
-    def in_multiple_threads(data, &block)
-      threads = [@config[:parallel] || 10, data.size].min
-      data = data.to_a
-      (1..threads).to_a.map do
-        Thread.new do
-          while chunk = data.pop
-            yield chunk
-          end
-        end
-      end.map(&:join)
+    def in_multiple_processes(data, &block)
+      processes = [@config[:parallel] || 10, data.size].min
+      Parallel.each(data, :in_processes => processes, &block) # we tried threads but that blew up with weird errors when having lot's of uploads :/
     end
   end
 
@@ -161,7 +155,7 @@ module S3MetaSync
         opts.on("-k", "--key KEY", "AWS access key") { |c| options[:key] = c }
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
         opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
-        opts.on("-p", "--parallel COUNT", Integer, "Use COUNT threads for download/upload default: 10") { |c| options[:parallel] = c }
+        opts.on("-p", "--parallel COUNT", Integer, "Use COUNT processes for download/upload default: 10") { |c| options[:parallel] = c }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
         opts.on("-v", "--version", "Show Version"){ puts VERSION; exit}
       end.parse!(argv)
