@@ -8,6 +8,7 @@ describe S3MetaSync do
   let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
   let(:s3) { AWS::S3.new(:access_key_id => config[:key], :secret_access_key => config[:secret]).buckets[config[:bucket]] }
   let(:foo_md5) { "---\nxxx: 0976fb571ada412514fe67273780c510\n" }
+  let(:syncer) { S3MetaSync::Syncer.new(config) }
 
   def upload_simple_structure
     `mkdir foo && echo yyy > foo/xxx`
@@ -18,6 +19,14 @@ describe S3MetaSync do
     open("https://s3-us-west-2.amazonaws.com/#{config[:bucket]}/#{file}").read
   rescue
     nil
+  end
+
+  def with_utf8_encoding
+    old = Encoding.default_external, Encoding.default_internal
+    Encoding.default_external = Encoding.default_internal = Encoding::UTF_8
+    yield
+  ensure
+    Encoding.default_external, Encoding.default_internal = old
   end
 
   around do |test|
@@ -31,7 +40,6 @@ describe S3MetaSync do
   end
 
   describe "#sync" do
-    let(:syncer) { S3MetaSync::Syncer.new(config) }
     before { upload_simple_structure }
     after { cleanup_s3 }
 
@@ -93,6 +101,21 @@ describe S3MetaSync do
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.read("foo/xxx").should == "yyy\n"
       end
+    end
+  end
+
+  it "can upload and download a utf-8 file" do
+    with_utf8_encoding do
+      syncer.instance_variable_set(:@bucket, config[:bucket])
+      expected = "…"
+      `mkdir foo`
+      File.write("foo/utf8", expected)
+      syncer.send(:upload_file, "foo", "utf8", "bar")
+      syncer.send(:download_file, "bar", "utf8", "baz")
+      read = File.read("baz/utf8")
+      read.should == expected
+      read.encoding.should == Encoding::UTF_8
+      read[/…/].should == "…"
     end
   end
 

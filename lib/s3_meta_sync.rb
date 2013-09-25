@@ -90,7 +90,7 @@ module S3MetaSync
       content = download_content("#{source}/#{path}")
       file = "#{destination}/#{path}"
       FileUtils.mkdir_p(File.dirname(file))
-      File.write(file, content)
+      File.write(file, content, :encoding => content.encoding)
     end
 
     def download_content(path)
