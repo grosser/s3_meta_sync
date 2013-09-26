@@ -138,7 +138,10 @@ module S3MetaSync
     end
 
     def parse_options(argv)
-      options = {}
+      options = {
+        :key => ENV["AWS_ACCESS_KEY_ID"],
+        :secret => ENV["AWS_SECRET_ACCESS_KEY"]
+      }
       OptionParser.new do |opts|
         opts.banner = <<-BANNER.gsub(/^ {10}/, "")
           Sync folders with s3 using a metadata file with md5 sums.
@@ -149,6 +152,7 @@ module S3MetaSync
           # download files and remove everything that is not remote
           s3-meta-sync <bucket:folder> <local> # no credentials required
 
+          Key and secret can also be supplied using AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
 
           Options:
         BANNER

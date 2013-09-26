@@ -14,6 +14,8 @@ s3-meta-sync <local> <bucket:folder> --key <aws-access-key> --secret <aws-secret
 
 # download files and remove everything that is not remote
 s3-meta-sync <bucket:folder> <local> --region us-west-2 # no credentials required
+
+Key and secret can also be supplied using AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
 ```
 
 ### Options

@@ -120,6 +120,11 @@ describe S3MetaSync do
   end
 
   describe ".parse_options" do
+    after do
+      ENV.delete "AWS_ACCESS_KEY_ID"
+      ENV.delete "AWS_SECRET_ACCESS_KEY"
+    end
+
     def call(*args)
       S3MetaSync.send(:parse_options, *args)
     end
@@ -137,7 +142,7 @@ describe S3MetaSync do
     end
 
     it "parses source + destination" do
-      call(["x:z", "y"]).should == ["x:z", "y", {}]
+      call(["x:z", "y"]).should == ["x:z", "y", {:key => nil, :secret => nil}]
     end
 
     it "parses key + secret" do
@@ -154,6 +159,12 @@ describe S3MetaSync do
 
     it "fails with missing key and secret" do
       expect { call(["x", "y:z"]) }.to raise_error
+    end
+
+    it "takes key and secret from the environment" do
+      ENV["AWS_ACCESS_KEY_ID"] = "k"
+      ENV["AWS_SECRET_ACCESS_KEY"] = "s"
+      call(["x", "y:z"]).should == ["x", "y:z", {:key => "k", :secret => "s"}]
     end
   end
 
