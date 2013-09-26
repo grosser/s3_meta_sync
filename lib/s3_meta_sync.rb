@@ -5,6 +5,7 @@ require "digest/md5"
 require "aws/s3"
 require "optparse"
 require "parallel"
+require "fileutils"
 
 module S3MetaSync
   RemoteWithoutMeta = Class.new(Exception)
