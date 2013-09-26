@@ -161,7 +161,8 @@ module S3MetaSync
       end.parse!(argv)
 
       raise "need source and destination" unless argv.size == 2
-      raise "need credentials --key + --secret" if argv.last.include?(":") and not options[:key] or not options[:secret]
+      raise "need 1 local and 1 remote" unless argv.select { |a| a.include?(":") }.size == 1
+      raise "need credentials --key + --secret" if argv.last.include?(":") and (not options[:key] or not options[:secret])
 
       [*argv, options]
     end

@@ -119,6 +119,44 @@ describe S3MetaSync do
     end
   end
 
+  describe ".parse_options" do
+    def call(*args)
+      S3MetaSync.send(:parse_options, *args)
+    end
+
+    it "fails with empty" do
+      expect { call([]) }.to raise_error
+    end
+
+    it "fails with 2 remotes" do
+      expect { call(["x:z", "z:y", "--key", "k", "--secret", "s"]) }.to raise_error
+    end
+
+    it "fails with 2 locals" do
+      expect { call(["x", "z"]) }.to raise_error
+    end
+
+    it "parses source + destination" do
+      call(["x:z", "y"]).should == ["x:z", "y", {}]
+    end
+
+    it "parses key + secret" do
+      call(["x", "y:z", "--key", "k", "--secret", "s"]).should == ["x", "y:z", {:key => "k", :secret => "s"}]
+    end
+
+    it "fails with missing key" do
+      expect { call(["x", "y:z", "--secret", "s"]) }.to raise_error
+    end
+
+    it "fails with missing secret" do
+      expect { call(["x", "y:z", "--key", "k"]) }.to raise_error
+    end
+
+    it "fails with missing key and secret" do
+      expect { call(["x", "y:z"]) }.to raise_error
+    end
+  end
+
   describe "CLI" do
     def sync(command, options={})
       sh("#{Bundler.root}/bin/s3-meta-sync #{command}", options)
