@@ -43,9 +43,7 @@ module S3MetaSync
         upload_file(source, path, destination)
       end
 
-      (remote_info.keys - local_info.keys).each do |path|
-        delete_remote_file(destination, path)
-      end
+      delete_remote_files(destination, remote_info.keys - local_info.keys)
 
       upload_file(source, META_FILE, destination)
     end
@@ -54,12 +52,12 @@ module S3MetaSync
       s3.objects["#{destination}/#{path}"].write File.read("#{source}/#{path}"), :acl => :public_read
     end
 
-    def delete_remote_file(remote, path)
-      s3.objects["#{remote}/#{path}"].delete
+    def delete_remote_files(remote, paths)
+      s3.objects.delete paths.map { |path| "#{remote}/#{path}" }
     end
 
-    def delete_local_file(local, path)
-      File.delete("#{local}/#{path}")
+    def delete_local_files(local, paths)
+      File.delete(*paths.map { |path| "#{local}/#{path}" })
     end
 
     def s3
@@ -111,9 +109,7 @@ module S3MetaSync
         download_file(source, path, destination)
       end
 
-      (local_info.keys - remote_info.keys).each do |path|
-        delete_local_file(destination, path)
-      end
+      delete_local_files(destination, local_info.keys - remote_info.keys)
 
       download_file(source, META_FILE, destination)
 
