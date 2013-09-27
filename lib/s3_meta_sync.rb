@@ -121,20 +121,20 @@ module S3MetaSync
     end
 
     def download_files(source, destination, paths)
-      in_multiple_processes(paths) { |path| download_file(source, path, destination) }
+      in_parallel(:threads, paths) { |path| download_file(source, path, destination) }
     end
 
     def upload_files(source, destination, paths)
-      in_multiple_processes(paths) { |path| upload_file(source, path, destination) }
+      in_parallel(:processes, paths) { |path| upload_file(source, path, destination) }
     end
 
     def region
       @config[:region] unless @config[:region].to_s.empty?
     end
 
-    def in_multiple_processes(data, &block)
+    def in_parallel(way, data, &block)
       processes = [@config[:parallel] || 10, data.size].min
-      Parallel.each(data, :in_processes => processes, &block) # we tried threads but that blew up with weird errors when having lot's of uploads :/
+      Parallel.each(data, :"in_#{way}" => processes, &block) # we tried threads but that blew up with weird errors when having lot's of uploads :/
     end
 
     def log(text)
