@@ -1,14 +1,14 @@
 require "spec_helper"
 
-def cleanup_s3
-  s3.objects.each { |o| o.delete }
-end
-
 describe S3MetaSync do
   let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
   let(:s3) { AWS::S3.new(:access_key_id => config[:key], :secret_access_key => config[:secret]).buckets[config[:bucket]] }
   let(:foo_md5) { "---\nxxx: 0976fb571ada412514fe67273780c510\n" }
   let(:syncer) { S3MetaSync::Syncer.new(config) }
+
+  def cleanup_s3
+    s3.objects.each { |o| o.delete }
+  end
 
   def upload_simple_structure
     `mkdir foo && echo yyy > foo/xxx`
@@ -166,9 +166,15 @@ describe S3MetaSync do
       ENV["AWS_SECRET_ACCESS_KEY"] = "s"
       call(["x", "y:z"]).should == ["x", "y:z", {:key => "k", :secret => "s"}]
     end
+
+    it "take verbose mode" do
+      call(["x:z", "y", "-V"]).should == ["x:z", "y", {:key => nil, :secret => nil, :verbose => true}]
+      call(["x:z", "y", "--verbose"]).should == ["x:z", "y", {:key => nil, :secret => nil, :verbose => true}]
+    end
   end
 
   describe "CLI" do
+    let(:params) { "--key #{config[:key]} --secret #{config[:secret]} --region #{config[:region]}" }
     def sync(command, options={})
       sh("#{Bundler.root}/bin/s3-meta-sync #{command}", options)
     end
@@ -187,13 +193,28 @@ describe S3MetaSync do
       sync("--help").should include("Sync folders with s3")
     end
 
-    it "works" do
-      begin
-        `mkdir foo && echo yyy > foo/xxx`
-        sync("foo #{config[:bucket]}:bar --key #{config[:key]} --secret #{config[:secret]} --region #{config[:region]}")
+    context "upload" do
+      around do |test|
+        begin
+          `mkdir foo && echo yyy > foo/xxx`
+          test.call
+        ensure
+          cleanup_s3
+        end
+      end
+
+      it "works" do
+        sync("foo #{config[:bucket]}:bar #{params}").should == ""
         download("bar/xxx").should == "yyy\n"
-      ensure
-        cleanup_s3
+      end
+
+      it "is verbose" do
+        sync("foo #{config[:bucket]}:bar #{params} --verbose").strip.should == <<-TXT.gsub(/^ {10}/, "").strip
+          Downloading bar/.s3-meta-sync
+          Remote has no .s3-meta-sync, uploading everything
+          Uploading xxx
+          Uploading .s3-meta-sync
+        TXT
       end
     end
   end

@@ -34,31 +34,33 @@ module S3MetaSync
       remote_info = begin
         download_meta(destination)
       rescue RemoteWithoutMeta
+        log "Remote has no .s3-meta-sync, uploading everything"
         {}
       end
       generate_meta(source)
       local_info = read_meta(source)
+      upload = local_info.select { |path, md5| remote_info[path] != md5 }.map(&:first)
+      delete = remote_info.keys - local_info.keys
 
-      in_multiple_processes(local_info) do |path, md5|
-        next if remote_info[path] == md5
-        upload_file(source, path, destination)
-      end
-
-      delete_remote_files(destination, remote_info.keys - local_info.keys)
-
+      upload_files(source, destination, upload)
+      delete_remote_files(destination, delete)
       upload_file(source, META_FILE, destination)
     end
 
     def upload_file(source, path, destination)
+      log "Uploading #{path}"
       s3.objects["#{destination}/#{path}"].write File.read("#{source}/#{path}"), :acl => :public_read
     end
 
     def delete_remote_files(remote, paths)
+      paths.each { |path| log "Deleting #{@bucket}:#{remote}/#{path}" }
       s3.objects.delete paths.map { |path| "#{remote}/#{path}" }
     end
 
     def delete_local_files(local, paths)
-      File.delete(*paths.map { |path| "#{local}/#{path}" })
+      paths = paths.map { |path| "#{local}/#{path}" }
+      paths.each { |path| log "Deleting #{path}" }
+      File.delete(*paths)
     end
 
     def s3
@@ -94,6 +96,7 @@ module S3MetaSync
     end
 
     def download_content(path)
+      log "Downloading #{path}"
       url = "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
       open(url).read
     rescue OpenURI::HTTPError
@@ -103,18 +106,26 @@ module S3MetaSync
     def download(source, destination)
       remote_info = download_meta(source)
       generate_meta(destination)
-      local_info = read_meta(destination) # TODO maybe generate !?
+      local_info = read_meta(destination)
+      download = remote_info.select { |path, md5| local_info[path] != md5 }.map(&:first)
+      delete = local_info.keys - remote_info.keys
 
-      in_multiple_processes(remote_info) do |path, md5|
-        next if local_info[path] == md5
-        download_file(source, path, destination)
-      end
-
-      delete_local_files(destination, local_info.keys - remote_info.keys)
-
+      download_files(source, destination, download)
+      delete_local_files(destination, delete)
       download_file(source, META_FILE, destination)
+      delete_empty_folders(destination)
+    end
 
+    def delete_empty_folders(destination)
       `find #{destination} -depth -empty -delete`
+    end
+
+    def download_files(source, destination, paths)
+      in_multiple_processes(paths) { |path| download_file(source, path, destination) }
+    end
+
+    def upload_files(source, destination, paths)
+      in_multiple_processes(paths) { |path| upload_file(source, path, destination) }
     end
 
     def region
@@ -124,6 +135,10 @@ module S3MetaSync
     def in_multiple_processes(data, &block)
       processes = [@config[:parallel] || 10, data.size].min
       Parallel.each(data, :in_processes => processes, &block) # we tried threads but that blew up with weird errors when having lot's of uploads :/
+    end
+
+    def log(text)
+      $stderr.puts text if @config[:verbose]
     end
   end
 
@@ -157,6 +172,7 @@ module S3MetaSync
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
         opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
         opts.on("-p", "--parallel COUNT", Integer, "Use COUNT processes for download/upload default: 10") { |c| options[:parallel] = c }
+        opts.on("-V", "--verbose", "Verbose mode"){ options[:verbose] = true }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
         opts.on("-v", "--version", "Show Version"){ puts VERSION; exit}
       end.parse!(argv)
