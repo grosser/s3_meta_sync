@@ -3,7 +3,6 @@ require "open-uri"
 require "yaml"
 require "digest/md5"
 require "optparse"
-require "parallel"
 require "fileutils"
 
 # need to require these or upload in multiple threads will fail on systems with high load
@@ -129,20 +128,27 @@ module S3MetaSync
     end
 
     def download_files(source, destination, paths)
-      in_parallel(:threads, paths) { |path| download_file(source, path, destination) }
+      in_multiple_threads(paths) { |path| download_file(source, path, destination) }
     end
 
     def upload_files(source, destination, paths)
-      in_parallel(:processes, paths) { |path| upload_file(source, path, destination) }
+      in_multiple_threads(paths) { |path| upload_file(source, path, destination) }
     end
 
     def region
       @config[:region] unless @config[:region].to_s.empty?
     end
 
-    def in_parallel(way, data, &block)
-      processes = [@config[:parallel] || 10, data.size].min
-      Parallel.each(data, :"in_#{way}" => processes, &block) # we tried threads but that blew up with weird errors when having lot's of uploads :/
+    def in_multiple_threads(data)
+      threads = [@config[:parallel] || 10, data.size].min
+      data = data.dup
+      threads.times do
+        Thread.new do
+          while slice = data.shift
+            yield slice
+          end
+        end
+      end
     end
 
     def log(text, important=false)
@@ -179,7 +185,7 @@ module S3MetaSync
         opts.on("-k", "--key KEY", "AWS access key") { |c| options[:key] = c }
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
         opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
-        opts.on("-p", "--parallel COUNT", Integer, "Use COUNT processes for download/upload default: 10") { |c| options[:parallel] = c }
+        opts.on("-p", "--parallel COUNT", Integer, "Use COUNT threads for download/upload default: 10") { |c| options[:parallel] = c }
         opts.on("-V", "--verbose", "Verbose mode"){ options[:verbose] = true }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
         opts.on("-v", "--version", "Show Version"){ puts VERSION; exit}

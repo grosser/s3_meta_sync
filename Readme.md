@@ -24,7 +24,7 @@ Key and secret can also be supplied using AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_
     -k, --key KEY                    AWS access key
     -s, --secret SECRET              AWS secret key
     -r, --region REGION              AWS region if not us-standard
-    -p, --parallel COUNT             Use COUNT processes for download/upload default: 10
+    -p, --parallel COUNT             Use COUNT threads for download/upload default: 10
     -V, --verbose                    Verbose mode
     -h, --help                       Show this.
     -v, --version                    Show Version
