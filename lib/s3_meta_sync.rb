@@ -5,11 +5,14 @@ require "digest/md5"
 require "optparse"
 require "fileutils"
 
-# need to require these or upload in multiple threads will fail on systems with high load
 require "aws/s3"
-require "aws/s3/s3_object"
-require "aws/core/response"
-require "aws/s3/object_collection"
+
+if RUBY_VERSION < "2.0.0"
+  # need to require these or upload in multiple threads will fail on systems with high load
+  require "aws/s3/s3_object"
+  require "aws/core/response"
+  require "aws/s3/object_collection"
+end
 
 module S3MetaSync
   RemoteWithoutMeta = Class.new(Exception)
