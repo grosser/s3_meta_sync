@@ -41,10 +41,26 @@ module S3MetaSync
       local_info = read_meta(source)
       upload = local_info.select { |path, md5| remote_info[path] != md5 }.map(&:first)
       delete = remote_info.keys - local_info.keys
+      log "Uploading: #{upload.size} Deleting: #{delete.size}", true
 
       upload_files(source, destination, upload)
       delete_remote_files(destination, delete)
       upload_file(source, META_FILE, destination)
+    end
+
+    def download(source, destination)
+      remote_info = download_meta(source)
+      generate_meta(destination)
+      local_info = read_meta(destination)
+      download = remote_info.select { |path, md5| local_info[path] != md5 }.map(&:first)
+      delete = local_info.keys - remote_info.keys
+
+      log "Downloading: #{download.size} Deleting: #{delete.size}", true
+
+      download_files(source, destination, download)
+      delete_local_files(destination, delete)
+      download_file(source, META_FILE, destination)
+      delete_empty_folders(destination)
     end
 
     def upload_file(source, path, destination)
@@ -103,19 +119,6 @@ module S3MetaSync
       raise "Unable to download #{url} -- #{$!}"
     end
 
-    def download(source, destination)
-      remote_info = download_meta(source)
-      generate_meta(destination)
-      local_info = read_meta(destination)
-      download = remote_info.select { |path, md5| local_info[path] != md5 }.map(&:first)
-      delete = local_info.keys - remote_info.keys
-
-      download_files(source, destination, download)
-      delete_local_files(destination, delete)
-      download_file(source, META_FILE, destination)
-      delete_empty_folders(destination)
-    end
-
     def delete_empty_folders(destination)
       `find #{destination} -depth -empty -delete`
     end
@@ -137,8 +140,8 @@ module S3MetaSync
       Parallel.each(data, :"in_#{way}" => processes, &block) # we tried threads but that blew up with weird errors when having lot's of uploads :/
     end
 
-    def log(text)
-      $stderr.puts text if @config[:verbose]
+    def log(text, important=false)
+      $stderr.puts text if @config[:verbose] or important
     end
   end
 

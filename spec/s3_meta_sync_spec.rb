@@ -40,7 +40,10 @@ describe S3MetaSync do
   end
 
   describe "#sync" do
-    before { upload_simple_structure }
+    before do
+      $stderr.stub(:puts)
+      upload_simple_structure
+    end
     after { cleanup_s3 }
 
     context "sync local to remote" do
@@ -204,7 +207,7 @@ describe S3MetaSync do
       end
 
       it "works" do
-        sync("foo #{config[:bucket]}:bar #{params}").should == ""
+        sync("foo #{config[:bucket]}:bar #{params}").should == "Uploading: 1 Deleting: 0\n"
         download("bar/xxx").should == "yyy\n"
       end
 
@@ -212,6 +215,7 @@ describe S3MetaSync do
         sync("foo #{config[:bucket]}:bar #{params} --verbose").strip.should == <<-TXT.gsub(/^ {10}/, "").strip
           Downloading bar/.s3-meta-sync
           Remote has no .s3-meta-sync, uploading everything
+          Uploading: 1 Deleting: 0
           Uploading xxx
           Uploading .s3-meta-sync
         TXT
