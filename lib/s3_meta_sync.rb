@@ -2,10 +2,15 @@ require "s3_meta_sync/version"
 require "open-uri"
 require "yaml"
 require "digest/md5"
-require "aws/s3"
 require "optparse"
 require "parallel"
 require "fileutils"
+
+# need to require these or upload in multiple threads will fail on systems with high load
+require "aws/s3"
+require "aws/s3/s3_object"
+require "aws/core/response"
+require "aws/s3/object_collection"
 
 module S3MetaSync
   RemoteWithoutMeta = Class.new(Exception)
