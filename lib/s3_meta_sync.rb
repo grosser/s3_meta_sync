@@ -145,13 +145,13 @@ module S3MetaSync
     def in_multiple_threads(data)
       threads = [@config[:parallel] || 10, data.size].min
       data = data.dup
-      threads.times do
+      (0...threads).to_a.map do
         Thread.new do
           while slice = data.shift
             yield slice
           end
         end
-      end
+      end.each(&:join)
     end
 
     def log(text, important=false)
