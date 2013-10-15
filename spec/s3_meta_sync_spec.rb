@@ -174,6 +174,10 @@ describe S3MetaSync do
       call(["x:z", "y", "-V"]).should == ["x:z", "y", {:key => nil, :secret => nil, :verbose => true}]
       call(["x:z", "y", "--verbose"]).should == ["x:z", "y", {:key => nil, :secret => nil, :verbose => true}]
     end
+
+    it "parses --ssl-none" do
+      call(["x:z", "y", "--ssl-none"]).should == ["x:z", "y", {:key => nil, :secret => nil, :ssl_none => true}]
+    end
   end
 
   describe "CLI" do

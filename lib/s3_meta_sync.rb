@@ -121,7 +121,8 @@ module S3MetaSync
     def download_content(path)
       log "Downloading #{path}"
       url = "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
-      open(url).read
+      options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
+      open(url, options).read
     rescue OpenURI::HTTPError
       raise "Unable to download #{url} -- #{$!}"
     end
@@ -189,6 +190,7 @@ module S3MetaSync
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
         opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
         opts.on("-p", "--parallel COUNT", Integer, "Use COUNT threads for download/upload default: 10") { |c| options[:parallel] = c }
+        opts.on("--ssl-none", "Do not verify ssl certs") { |c| options[:ssl_none] = true }
         opts.on("-V", "--verbose", "Verbose mode"){ options[:verbose] = true }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
         opts.on("-v", "--version", "Show Version"){ puts VERSION; exit}
