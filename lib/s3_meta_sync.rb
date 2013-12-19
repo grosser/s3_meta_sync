@@ -125,6 +125,15 @@ module S3MetaSync
       open(url, options).read
     rescue OpenURI::HTTPError
       raise "Unable to download #{url} -- #{$!}"
+    rescue OpenSSL::SSL::SSLError
+      retries ||= 0
+      retries += 1
+      if retries == 1
+        log "SSL error downloading #{path}, retrying"
+        retry
+      else
+        raise
+      end
     end
 
     def delete_empty_folders(destination)
