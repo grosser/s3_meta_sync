@@ -18,6 +18,8 @@ s3-meta-sync <bucket:folder> <local> --region us-west-2 # no credentials require
 Key and secret can also be supplied using AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
 ```
 
+If a downloaded file is does not match it's md5 sum in .s3-meta-sync, the whole download is aborted and no change is made.
+
 ### Options
 
 ```
