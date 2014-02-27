@@ -123,12 +123,17 @@ module S3MetaSync
     end
 
     def generate_meta(source)
-      meta = Hash[Dir["#{source}/**/*"].select { |f| File.file?(f) }.map do |file|
-        [file.sub("#{source}/", ""), Digest::MD5.file(file).to_s]
-      end]
       file = "#{source}/#{META_FILE}"
       FileUtils.mkdir_p(File.dirname(file))
-      File.write(file, meta.to_yaml)
+      File.write(file, meta_data(source).to_yaml)
+    end
+
+    def meta_data(source)
+      return {} unless File.directory?(source)
+      Dir.chdir(source) do
+        files = Dir["**/*"].select { |f| File.file?(f) }
+        Hash[files.map { |file| [file, Digest::MD5.file(file).to_s] }]
+      end
     end
 
     def read_meta(source)
