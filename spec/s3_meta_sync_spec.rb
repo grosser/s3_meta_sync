@@ -82,8 +82,8 @@ describe S3MetaSync do
       end
 
       it "downloads nothing when everything is up to date" do
-        no_cred_syncer.should_receive(:download_file).with("bar", ".s3-meta-sync", "foo")
-        no_cred_syncer.should_not_receive(:delete_local_file)
+        no_cred_syncer.should_not_receive(:download_file)
+        no_cred_syncer.should_not_receive(:delete_local_files)
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
       end
 
@@ -94,7 +94,8 @@ describe S3MetaSync do
       end
 
       it "removes empty folders" do
-        `mkdir foo/baz`
+        raise unless system "mkdir foo/baz"
+        raise unless system "echo dssdf > foo/baz/will_be_deleted"
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.exist?("foo/baz").should == false
       end
@@ -103,6 +104,23 @@ describe S3MetaSync do
         `echo fff > foo/xxx`
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.read("foo/xxx").should == "yyy\n"
+      end
+
+      it "does not overwrite local files when md5 does not match" do
+        # s3 is corrupted
+        File.write("foo/xxx", "corrupted!")
+        syncer.send(:upload_file, "foo", "xxx", "bar")
+        syncer.send(:download_content, "bar/xxx").should == "corrupted!"
+
+        # directory exists with an old file
+        FileUtils.mkdir("foo2")
+        File.write("foo2/xxx", "old")
+
+        # does not override
+        expect {
+          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        }.to raise_error S3MetaSync::RemoteCorrupt
+        File.read("foo2/xxx").should == "old"
       end
     end
   end

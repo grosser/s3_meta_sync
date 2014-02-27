@@ -4,6 +4,7 @@ require "yaml"
 require "digest/md5"
 require "optparse"
 require "fileutils"
+require "tmpdir"
 
 require "aws/s3"
 
@@ -16,6 +17,7 @@ end
 
 module S3MetaSync
   RemoteWithoutMeta = Class.new(Exception)
+  RemoteCorrupt = Class.new(Exception)
   META_FILE = ".s3-meta-sync"
 
   class Syncer
@@ -64,10 +66,40 @@ module S3MetaSync
 
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
-      download_files(source, destination, download)
-      delete_local_files(destination, delete)
-      download_file(source, META_FILE, destination)
-      delete_empty_folders(destination)
+      unless download.empty? && delete.empty?
+        Dir.mktmpdir do |dir|
+          copy_content(destination, dir)
+          download_files(source, dir, download)
+          delete_local_files(dir, delete)
+          download_file(source, META_FILE, dir)
+          verify_integrity!(dir)
+          delete_empty_folders(dir)
+          swap_in_directory(destination, dir)
+        end
+      end
+    end
+
+    def copy_content(destination, dir)
+      system "cp -R #{destination}/* #{dir} 2>/dev/null"
+    end
+
+    def swap_in_directory(destination, dir)
+      Dir.mktmpdir { |landfill| FileUtils.mv(destination, landfill) }
+      FileUtils.mv(dir, destination)
+      FileUtils.mkdir(dir) # make ensure in outside mktmpdir not blow up
+    end
+
+    def verify_integrity!(source)
+      file = "#{source}/#{META_FILE}"
+      old = File.read(file)
+      generate_meta(source)
+      new = File.read(file)
+      if new != old
+        log "old meta:\n#{old}\n\nnew meta:\n#{new}", true
+        raise RemoteCorrupt
+      end
+    ensure
+      File.write(file, old) if old
     end
 
     def upload_file(source, path, destination)
