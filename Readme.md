@@ -32,6 +32,17 @@ If a downloaded file is does not match it's md5 sum in .s3-meta-sync, the whole 
     -v, --version                    Show Version
 ```
 
+## Production setup example
+
+```Bash
+# download translations from s3
+# - timeout after 60 minutes
+# - use a lockfile to not run more than once
+# - on failure: print output -> cron email is sent (downloaded files are discarded)
+# - on success: amend to log
+timeout 60m /usr/bin/flock -n lock sh -c '(s3-meta-sync company:translations /data/translations > /tmp/downloader.log 2>&1 && date >> /tmp/downloader.log && cat /tmp/downloader.log >> /var/log/downloader.log) || cat /tmp/downloader.log'
+```
+
 Author
 ======
 [Michael Grosser](http://grosser.it)<br/>
