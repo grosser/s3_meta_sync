@@ -45,7 +45,7 @@ s3-meta-sync working company:translations
 Download:
 ```Bash
 # download translations from s3
-# - timeout after 60 minutes
+# - timeout after 60 minutes (http://www.gnu.org/software/coreutils)
 # - use a lockfile to not run more than once
 # - on failure: print output -> cron email is sent (downloaded files are discarded)
 # - on success: amend to log
