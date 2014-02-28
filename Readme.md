@@ -34,6 +34,15 @@ If a downloaded file is does not match it's md5 sum in .s3-meta-sync, the whole 
 
 ## Production setup example
 
+Upload:
+```Bash
+s3-meta-sync company:translations translations # download current translations (will fail on corrupted translations but leave a log)
+cp -R translations working # make a copy so corruption detection is used on next download
+rake generate_translations
+s3-meta-sync working company:translations
+```
+
+Download:
 ```Bash
 # download translations from s3
 # - timeout after 60 minutes
