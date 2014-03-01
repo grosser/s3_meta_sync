@@ -19,6 +19,7 @@ module S3MetaSync
   RemoteWithoutMeta = Class.new(Exception)
   RemoteCorrupt = Class.new(Exception)
   META_FILE = ".s3-meta-sync"
+  CORRUPT_FILES_LOG = "s3-meta-sync-corrupted.log"
 
   class Syncer
     def initialize(config)
@@ -40,15 +41,16 @@ module S3MetaSync
     private
 
     def upload(source, destination)
+      corrupted = consume_corrupted_files(source)
       remote_info = begin
         download_meta(destination)
       rescue RemoteWithoutMeta
-        log "Remote has no .s3-meta-sync, uploading everything"
+        log "Remote has no .s3-meta-sync, uploading everything", true
         {}
       end
       generate_meta(source)
       local_info = read_meta(source)
-      upload = local_info.select { |path, md5| remote_info[path] != md5 }.map(&:first)
+      upload = local_info.select { |path, md5| remote_info[path] != md5 }.map(&:first) | corrupted
       delete = remote_info.keys - local_info.keys
       log "Uploading: #{upload.size} Deleting: #{delete.size}", true
 
@@ -67,14 +69,14 @@ module S3MetaSync
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
       unless download.empty? && delete.empty?
-        Dir.mktmpdir do |dir|
-          copy_content(destination, dir)
-          download_files(source, dir, download)
-          delete_local_files(dir, delete)
-          download_file(source, META_FILE, dir)
-          verify_integrity!(dir)
-          delete_empty_folders(dir)
-          swap_in_directory(destination, dir)
+        Dir.mktmpdir do |staging_area|
+          copy_content(destination, staging_area)
+          download_files(source, staging_area, download)
+          delete_local_files(staging_area, delete)
+          download_file(source, META_FILE, staging_area)
+          verify_integrity!(staging_area, destination)
+          delete_empty_folders(staging_area)
+          swap_in_directory(destination, staging_area)
         end
       end
     end
@@ -89,17 +91,29 @@ module S3MetaSync
       FileUtils.mkdir(dir) # make ensure in outside mktmpdir not blow up
     end
 
-    def verify_integrity!(source)
-      file = "#{source}/#{META_FILE}"
-      old = File.read(file)
-      generate_meta(source)
-      new = File.read(file)
-      if new != old
-        log "old meta:\n#{old}\n\nnew meta:\n#{new}", true
+    def verify_integrity!(staging_area, destination)
+      file = "#{staging_area}/#{META_FILE}"
+      downloaded = YAML.load_file(file)
+      actual = meta_data(staging_area)
+
+      if downloaded != actual
+        corrupted = actual.select { |file, md5| downloaded[file] != md5 }.map(&:first)
+        File.write("#{destination}/#{CORRUPT_FILES_LOG}", corrupted.join("\n"))
+        log "corrupted files downloaded:\n#{corrupted.join("\n")}", true
         raise RemoteCorrupt
       end
-    ensure
-      File.write(file, old) if old
+    end
+
+    def consume_corrupted_files(source)
+      log = "#{source}/#{CORRUPT_FILES_LOG}"
+      if File.exist?(log)
+        corrupted = File.read(log).split("\n")
+        log "force uploading #{corrupted.size} corrupted files", true
+        File.unlink log
+        corrupted
+      else
+        []
+      end
     end
 
     def upload_file(source, path, destination)
@@ -236,6 +250,7 @@ module S3MetaSync
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
         opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
         opts.on("-p", "--parallel COUNT", Integer, "Use COUNT threads for download/upload default: 10") { |c| options[:parallel] = c }
+        opts.on("--log-corrupted-files", "Log corrupted files, they will be force uploaded on the next run") { |c| options[:log_corrupted_files] = true }
         opts.on("--ssl-none", "Do not verify ssl certs") { |c| options[:ssl_none] = true }
         opts.on("-V", "--verbose", "Verbose mode"){ options[:verbose] = true }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }

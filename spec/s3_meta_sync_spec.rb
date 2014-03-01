@@ -29,6 +29,12 @@ describe S3MetaSync do
     Encoding.default_external, Encoding.default_internal = old
   end
 
+  def corrupt_file(file)
+    File.write("foo/#{file}", "corrupted!")
+    syncer.send(:upload_file, "foo", file, "bar")
+    syncer.send(:download_content, "bar/xxx").should == "corrupted!"
+  end
+
   around do |test|
     Dir.mktmpdir do |dir|
       Dir.chdir(dir, &test)
@@ -63,6 +69,26 @@ describe S3MetaSync do
         syncer.should_receive(:upload_file).with("foo", ".s3-meta-sync", "bar")
         syncer.should_not_receive(:delete_remote_file)
         syncer.sync("foo", "#{config[:bucket]}:bar")
+      end
+
+      it "force uploads files that are corrupted" do
+        old = File.read("foo/xxx")
+        corrupt_file "xxx"
+
+        # log corrupted files while downloading
+        File.write("foo/xxx", "changed") # trigger a download
+        expect {
+          syncer.sync("#{config[:bucket]}:bar", "foo")
+        }.to raise_error(S3MetaSync::RemoteCorrupt)
+        File.read("foo/s3-meta-sync-corrupted.log").should == "xxx"
+
+        # uploader should see the log and force a upload
+        File.write("foo/xxx", old) # same md5 so normally would not upload
+        syncer.sync("foo", "#{config[:bucket]}:bar")
+        syncer.send(:download_content, "bar/xxx").should == old
+
+        # log got consumed
+        File.exist?("foo/s3-meta-sync-corrupted.log").should == false
       end
     end
 
@@ -108,9 +134,7 @@ describe S3MetaSync do
 
       it "does not overwrite local files when md5 does not match" do
         # s3 is corrupted
-        File.write("foo/xxx", "corrupted!")
-        syncer.send(:upload_file, "foo", "xxx", "bar")
-        syncer.send(:download_content, "bar/xxx").should == "corrupted!"
+        corrupt_file
 
         # directory exists with an old file
         FileUtils.mkdir("foo2")
