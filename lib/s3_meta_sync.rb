@@ -250,7 +250,6 @@ module S3MetaSync
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
         opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
         opts.on("-p", "--parallel COUNT", Integer, "Use COUNT threads for download/upload default: 10") { |c| options[:parallel] = c }
-        opts.on("--log-corrupted-files", "Log corrupted files, they will be force uploaded on the next run") { |c| options[:log_corrupted_files] = true }
         opts.on("--ssl-none", "Do not verify ssl certs") { |c| options[:ssl_none] = true }
         opts.on("-V", "--verbose", "Verbose mode"){ options[:verbose] = true }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
