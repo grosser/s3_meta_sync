@@ -29,10 +29,10 @@ describe S3MetaSync do
     Encoding.default_external, Encoding.default_internal = old
   end
 
-  def corrupt_file(file)
-    File.write("foo/#{file}", "corrupted!")
+  def upload(file, content)
+    File.write("foo/#{file}", content)
     syncer.send(:upload_file, "foo", file, "bar")
-    syncer.send(:download_content, "bar/xxx").should == "corrupted!"
+    syncer.send(:download_content, "bar/#{file}").should == content
   end
 
   around do |test|
@@ -73,7 +73,7 @@ describe S3MetaSync do
 
       it "force uploads files that are corrupted" do
         old = File.read("foo/xxx")
-        corrupt_file "xxx"
+        upload "xxx", "corrupt!"
 
         # log corrupted files while downloading
         File.write("foo/xxx", "changed") # trigger a download
@@ -89,6 +89,11 @@ describe S3MetaSync do
 
         # log got consumed
         File.exist?("foo/s3-meta-sync-corrupted.log").should == false
+      end
+
+      it "does upload files that were corrupt but no longer exist" do
+        File.write("foo/s3-meta-sync-corrupted.log", "something")
+        syncer.sync("foo", "#{config[:bucket]}:bar")
       end
     end
 
@@ -134,7 +139,7 @@ describe S3MetaSync do
 
       it "does not overwrite local files when md5 does not match" do
         # s3 is corrupted
-        corrupt_file
+        upload "xxx", "corrupt!"
 
         # directory exists with an old file
         FileUtils.mkdir("foo2")
@@ -145,6 +150,13 @@ describe S3MetaSync do
           no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         }.to raise_error S3MetaSync::RemoteCorrupt
         File.read("foo2/xxx").should == "old"
+      end
+
+      it "does not consider additional files on s3 as corrupted" do
+        upload "yyy", "not-tracked"
+        File.unlink("foo/yyy")
+        syncer.sync("#{config[:bucket]}:bar", "foo")
+        File.exist?("foo/yyy").should == false
       end
     end
   end
@@ -276,7 +288,7 @@ describe S3MetaSync do
       end
 
       it "works" do
-        sync("foo #{config[:bucket]}:bar #{params}").should == "Uploading: 1 Deleting: 0\n"
+        sync("foo #{config[:bucket]}:bar #{params}").should == "Remote has no .s3-meta-sync, uploading everything\nUploading: 1 Deleting: 0\n"
         download("bar/xxx").should == "yyy\n"
       end
 

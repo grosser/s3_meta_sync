@@ -50,7 +50,7 @@ module S3MetaSync
       end
       generate_meta(source)
       local_info = read_meta(source)
-      upload = local_info.select { |path, md5| remote_info[path] != md5 }.map(&:first) | corrupted
+      upload = local_info.select { |path, md5| remote_info[path] != md5 || corrupted.include?(path) }.map(&:first)
       delete = remote_info.keys - local_info.keys
       log "Uploading: #{upload.size} Deleting: #{delete.size}", true
 
@@ -93,11 +93,11 @@ module S3MetaSync
 
     def verify_integrity!(staging_area, destination)
       file = "#{staging_area}/#{META_FILE}"
-      downloaded = YAML.load_file(file)
+      remote = YAML.load_file(file)
       actual = meta_data(staging_area)
 
-      if downloaded != actual
-        corrupted = actual.select { |file, md5| downloaded[file] != md5 }.map(&:first)
+      if remote != actual
+        corrupted = actual.select { |file, md5| remote[file] && remote[file] != md5 }.map(&:first)
         File.write("#{destination}/#{CORRUPT_FILES_LOG}", corrupted.join("\n"))
         log "corrupted files downloaded:\n#{corrupted.join("\n")}", true
         raise RemoteCorrupt
