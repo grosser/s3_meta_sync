@@ -112,6 +112,14 @@ describe S3MetaSync do
         File.read("foo2/.s3-meta-sync").should == foo_md5
       end
 
+      it "does not leave tempdirs behind" do
+        dir = File.dirname(Dir.mktmpdir)
+        before = Dir["#{dir}/*"].size
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        after = Dir["#{dir}/*"].size
+        after.should == before
+      end
+
       it "downloads nothing when everything is up to date" do
         no_cred_syncer.should_not_receive(:download_file)
         no_cred_syncer.should_not_receive(:delete_local_files)
