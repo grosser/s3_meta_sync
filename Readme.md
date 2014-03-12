@@ -42,14 +42,14 @@ rake generate_translations
 s3-meta-sync working company:translations
 ```
 
-Download:
+Download using [multi-timeout](https://github.com/grosser/multi_timeout):
 ```Bash
 # download translations from s3
-# - timeout after 60 minutes (http://www.gnu.org/software/coreutils)
+# - timeout after 60 minutes (INT so tempdirs get cleaned up)
 # - use a lockfile to not run more than once
 # - on failure: print output -> cron email is sent (downloaded files are discarded)
 # - on success: amend to log
-timeout 60m /usr/bin/flock -n lock sh -c '(s3-meta-sync company:translations /data/translations > /tmp/downloader.log 2>&1 && date >> /tmp/downloader.log && cat /tmp/downloader.log >> /var/log/downloader.log) || cat /tmp/downloader.log'
+multi-timeout -INT 59m -KILL 60m /usr/bin/flock -n lock sh -c '(s3-meta-sync company:translations /data/translations > /tmp/downloader.log 2>&1 && date >> /tmp/downloader.log && cat /tmp/downloader.log >> /var/log/downloader.log) || cat /tmp/downloader.log'
 ```
 
 Author
