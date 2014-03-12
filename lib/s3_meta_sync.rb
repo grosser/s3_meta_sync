@@ -76,7 +76,7 @@ module S3MetaSync
           download_file(source, META_FILE, staging_area)
           verify_integrity!(staging_area, destination)
           delete_empty_folders(staging_area)
-          swap_in_directory(destination, staging_area)
+          self.class.swap_in_directory(destination, staging_area)
         end
       end
     end
@@ -85,10 +85,24 @@ module S3MetaSync
       system "cp -R #{destination}/* #{dir} 2>/dev/null"
     end
 
-    def swap_in_directory(destination, dir)
-      Dir.mktmpdir { |landfill| FileUtils.mv(destination, landfill) }
-      FileUtils.mv(dir, destination)
-      FileUtils.mkdir(dir) # make ensure in outside mktmpdir not blow up
+    # almost atomic when destination and temp dir are not on the same device
+    def self.swap_in_directory(destination, dir)
+      next_dir = ".#{destination}-next"
+      delete = ".#{destination}-delete"
+
+      # clean up potential leftovers from last run
+      FileUtils.remove_dir(next_dir) if File.exist?(next_dir)
+      FileUtils.remove_dir(delete) if File.exist?(delete)
+
+      # move onto the same device
+      FileUtils.mv(dir, next_dir)
+
+      # swap
+      FileUtils.mv(destination, delete)
+      FileUtils.mv(next_dir, destination)
+
+      # cleanup old
+      FileUtils.remove_dir(delete)
     end
 
     def verify_integrity!(staging_area, destination)
