@@ -69,7 +69,7 @@ module S3MetaSync
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
       unless download.empty? && delete.empty?
-        Dir.mktmpdir do |staging_area|
+        mktmpdir do |staging_area|
           copy_content(destination, staging_area)
           download_files(source, staging_area, download)
           delete_local_files(staging_area, delete)
@@ -86,7 +86,7 @@ module S3MetaSync
     end
 
     def swap_in_directory(destination, dir)
-      Dir.mktmpdir { |landfill| FileUtils.mv(destination, landfill) }
+      mktmpdir { |landfill| FileUtils.mv(destination, landfill) }
       FileUtils.mv(dir, destination)
       FileUtils.mkdir(dir) # make ensure in outside mktmpdir not blow up
     end
@@ -185,6 +185,12 @@ module S3MetaSync
       else
         raise
       end
+    end
+
+    # allow to keep tmpdir in a different place, so it can be on the same device or
+    # a device that is bigger
+    def mktmpdir(&block)
+      Dir.mktmpdir(nil, ENV["TMPDIR"], &block)
     end
 
     def delete_empty_folders(destination)
