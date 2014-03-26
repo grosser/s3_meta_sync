@@ -35,6 +35,14 @@ describe S3MetaSync do
     syncer.send(:download_content, "bar/#{file}").should == content
   end
 
+  def with_env(name, value)
+    old = ENV[name]
+    ENV[name] = value
+    yield
+  ensure
+    ENV[name] = old
+  end
+
   around do |test|
     Dir.mktmpdir do |dir|
       Dir.chdir(dir, &test)
@@ -165,6 +173,19 @@ describe S3MetaSync do
         File.unlink("foo/yyy")
         syncer.sync("#{config[:bucket]}:bar", "foo")
         File.exist?("foo/yyy").should == false
+      end
+    end
+  end
+
+  describe "#mktmpdir" do
+    it "creates a normal directory" do
+      syncer.send(:mktmpdir).should be_start_with("/" + Dir.mktmpdir.split("/").first)
+    end
+
+    it "creates a directory in a given place" do
+      dir = Dir.mktmpdir
+      with_env "TMPDIR", dir do
+        syncer.send(:mktmpdir).should be_start_with(dir)
       end
     end
   end
