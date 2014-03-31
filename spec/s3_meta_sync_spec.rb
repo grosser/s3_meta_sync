@@ -265,6 +265,26 @@ describe S3MetaSync do
     end
   end
 
+  describe ".swap_in_directory" do
+    # this test being green is no guarantee of being atomic
+    it "does not leave gaps" do
+      begin
+        Dir.mkdir("foo")
+        Dir.mkdir("bar")
+        File.write("foo/bar", "1")
+        File.write("bar/bar", "2")
+        tester = Thread.new { loop { File.exist?("foo/bar").should == true } }
+        sleep 0.1 # let tester get started
+
+        File.read("foo/bar").should == "1"
+        S3MetaSync::Syncer.swap_in_directory("foo", "bar")
+        File.read("foo/bar").should == "2"
+      ensure
+        tester.kill
+      end
+    end
+  end
+
   describe "CLI" do
     let(:params) { "--key #{config[:key]} --secret #{config[:secret]} --region #{config[:region]}" }
     def sync(command, options={})
