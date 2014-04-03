@@ -77,6 +77,7 @@ module S3MetaSync
           verify_integrity!(staging_area, destination)
           delete_empty_folders(staging_area)
           self.class.swap_in_directory(destination, staging_area)
+          FileUtils.mkdir(staging_area)
         end
       end
     end
@@ -87,8 +88,8 @@ module S3MetaSync
 
     # almost atomic when destination and temp dir are not on the same device
     def self.swap_in_directory(destination, dir)
-      next_dir = ".#{destination}-next"
-      delete = ".#{destination}-delete"
+      next_dir = "#{destination}-next"
+      delete = "#{destination}-delete"
 
       # clean up potential leftovers from last run
       FileUtils.remove_dir(next_dir) if File.exist?(next_dir)

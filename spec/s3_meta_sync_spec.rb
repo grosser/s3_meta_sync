@@ -112,6 +112,12 @@ describe S3MetaSync do
         File.read("foo2/.s3-meta-sync").should == foo_md5
       end
 
+      it "downloads into an absolute folder" do
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "#{Dir.pwd}/foo2")
+        File.read("foo2/xxx").should == "yyy\n"
+        File.read("foo2/.s3-meta-sync").should == foo_md5
+      end
+
       it "does not leave tempdirs behind" do
         dir = File.dirname(Dir.mktmpdir)
         before = Dir["#{dir}/*"].size
