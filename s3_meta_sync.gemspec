@@ -15,5 +15,6 @@ Gem::Specification.new name, S3MetaSync::VERSION do |s|
     s.cert_chain = ["gem-public_cert.pem"]
   end
   s.add_runtime_dependency "aws-sdk"
+  s.add_runtime_dependency "curb"
   s.executables = ["s3-meta-sync"]
 end
