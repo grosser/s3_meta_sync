@@ -1,5 +1,5 @@
 require "s3_meta_sync/version"
-require "open-uri"
+require "curb"
 require "yaml"
 require "digest/md5"
 require "optparse"
@@ -187,9 +187,13 @@ module S3MetaSync
     def download_content(path)
       log "Downloading #{path}"
       url = "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
-      options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
-      open(url, options).read
-    rescue OpenURI::HTTPError
+      c = Curl::Easy.new(url) do |curl|
+        curl.headers[:ssl_verify_mode] = OpenSSL::SSL::VERIFY_NONE if @config[:ssl_none]
+      end
+      c.perform
+      puts c.body_str
+      c.body_str
+    rescue Curl::Err::HTTPError
       raise "Unable to download #{url} -- #{$!}"
     rescue OpenSSL::SSL::SSLError
       retries ||= 0
