@@ -110,6 +110,7 @@ describe S3MetaSync do
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         File.read("foo2/xxx").should == "yyy\n"
         File.read("foo2/.s3-meta-sync").should == foo_md5
+        File.stat("foo2/.s3-meta-sync").mode.to_s(8).should == "100755"
       end
 
       it "downloads into an absolute folder" do
