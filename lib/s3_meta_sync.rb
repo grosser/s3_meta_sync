@@ -98,6 +98,9 @@ module S3MetaSync
       # move onto the same device
       FileUtils.mv(dir, next_dir)
 
+      # copy permissions
+      FileUtils.chmod_R(File.stat(destination).mode, next_dir)
+
       # swap
       FileUtils.mv(destination, delete)
       FileUtils.mv(next_dir, destination)
