@@ -261,13 +261,13 @@ describe S3MetaSync do
     end
 
     it "retries once on ssl error" do
-      syncer.should_receive(:open).and_raise OpenSSL::SSL::SSLError.new
-      syncer.should_receive(:open).and_return stub(:read => "fff")
+      syncer.should_receive(:get).and_raise OpenSSL::SSL::SSLError.new
+      syncer.should_receive(:get).and_return "fff"
       syncer.send(:download_content, "bar/xxx").should == "fff"
     end
 
     it "does not retry multiple times on ssl error" do
-      syncer.should_receive(:open).exactly(2).and_raise OpenSSL::SSL::SSLError.new
+      syncer.should_receive(:get).exactly(2).and_raise OpenSSL::SSL::SSLError.new
       expect { syncer.send(:download_content, "bar/xxx") }.to raise_error(OpenSSL::SSL::SSLError)
     end
   end
