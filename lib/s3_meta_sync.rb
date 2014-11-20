@@ -1,10 +1,10 @@
 require "s3_meta_sync/version"
-require "open-uri"
 require "yaml"
 require "digest/md5"
 require "optparse"
 require "fileutils"
 require "tmpdir"
+require "net/http"
 
 require "aws/s3"
 
@@ -190,10 +190,7 @@ module S3MetaSync
     def download_content(path)
       log "Downloading #{path}"
       url = "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
-      options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
-      open(url, options).read
-    rescue OpenURI::HTTPError
-      raise "Unable to download #{url} -- #{$!}"
+      get(url)
     rescue OpenSSL::SSL::SSLError
       retries ||= 0
       retries += 1
@@ -203,6 +200,19 @@ module S3MetaSync
       else
         raise
       end
+    end
+
+    # download using http to take advantage of automatic gzipping
+    def get(url)
+      options = {:use_ssl => true}
+      options[:verify_mode] = OpenSSL::SSL::VERIFY_NONE if @config[:ssl_none]
+
+      uri = URI(url)
+      res = Net::HTTP.start(uri.host, uri.port, options) do |https|
+        https.request(Net::HTTP::Get.new(uri.to_s))
+      end
+      raise "Unable to download #{url} -- #{res.code}" unless res.code.to_i == 200
+      res.body
     end
 
     def delete_empty_folders(destination)
