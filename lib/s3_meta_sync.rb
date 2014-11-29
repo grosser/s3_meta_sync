@@ -5,6 +5,8 @@ require "digest/md5"
 require "optparse"
 require "fileutils"
 require "tmpdir"
+require "zlib"
+require "stringio"
 
 require "aws/s3"
 
@@ -20,6 +22,22 @@ module S3MetaSync
   RemoteCorrupt = Class.new(Exception)
   META_FILE = ".s3-meta-sync"
   CORRUPT_FILES_LOG = "s3-meta-sync-corrupted.log"
+
+  module Zip
+    class << self
+      def zip(string)
+        io = StringIO.new("w")
+        w_gz = Zlib::GzipWriter.new(io)
+        w_gz.write(string)
+        w_gz.close
+        io.string
+      end
+
+      def unzip(string)
+        Zlib::GzipReader.new(StringIO.new(string, "rb")).read
+      end
+    end
+  end
 
   class Syncer
     def initialize(config)
@@ -42,16 +60,21 @@ module S3MetaSync
 
     def upload(source, destination)
       corrupted = consume_corrupted_files(source)
-      remote_info = begin
+      remote_meta = begin
         download_meta(destination)
       rescue RemoteWithoutMeta
         log "Remote has no .s3-meta-sync, uploading everything", true
-        {}
+        {files: {}}
       end
       generate_meta(source)
-      local_info = read_meta(source)
-      upload = local_info.select { |path, md5| remote_info[path] != md5 || corrupted.include?(path) }.map(&:first)
-      delete = remote_info.keys - local_info.keys
+      local_files = read_meta(source)[:files]
+      remote_files = remote_meta[:files]
+      upload = if @config[:zip] == remote_meta[:zip]
+        local_files.select { |path, md5| remote_files[path] != md5 || corrupted.include?(path) }
+      else
+        local_files
+      end.map(&:first)
+      delete = remote_files.keys - local_files.keys
       log "Uploading: #{upload.size} Deleting: #{delete.size}", true
 
       upload_files(source, destination, upload)
@@ -60,20 +83,21 @@ module S3MetaSync
     end
 
     def download(source, destination)
-      remote_info = download_meta(source)
+      raise if @config[:zip]
+      remote_meta = download_meta(source)
       generate_meta(destination)
-      local_info = read_meta(destination)
-      download = remote_info.select { |path, md5| local_info[path] != md5 }.map(&:first)
-      delete = local_info.keys - remote_info.keys
+      local_files = read_meta(destination)[:files]
+      download = remote_meta[:files].select { |path, md5| local_files[path] != md5 }.map(&:first)
+      delete = local_files.keys - remote_meta[:files].keys
 
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
       unless download.empty? && delete.empty?
         Dir.mktmpdir do |staging_area|
           copy_content(destination, staging_area)
-          download_files(source, staging_area, download)
+          download_files(source, staging_area, download, remote_meta[:zip])
           delete_local_files(staging_area, delete)
-          download_file(source, META_FILE, staging_area)
+          download_file(source, META_FILE, staging_area, false)
           verify_integrity!(staging_area, destination)
           delete_empty_folders(staging_area)
           self.class.swap_in_directory(destination, staging_area)
@@ -111,8 +135,8 @@ module S3MetaSync
 
     def verify_integrity!(staging_area, destination)
       file = "#{staging_area}/#{META_FILE}"
-      remote = YAML.load_file(file)
-      actual = meta_data(staging_area)
+      remote = YAML.load_file(file)[:files]
+      actual = meta_data(staging_area)[:files]
 
       if remote != actual
         corrupted = actual.select { |file, md5| remote[file] && remote[file] != md5 }.map(&:first)
@@ -136,7 +160,9 @@ module S3MetaSync
 
     def upload_file(source, path, destination)
       log "Uploading #{path}"
-      s3.objects["#{destination}/#{path}"].write File.read("#{source}/#{path}"), :acl => :public_read
+      content = File.read("#{source}/#{path}")
+      content = Zip.zip(content) if @config[:zip]
+      s3.objects["#{destination}/#{path}"].write content, :acl => :public_read
     end
 
     def delete_remote_files(remote, paths)
@@ -151,7 +177,10 @@ module S3MetaSync
     end
 
     def s3
-      @s3 ||= ::AWS::S3.new(:access_key_id => @config[:key], :secret_access_key => @config[:secret]).buckets[@bucket]
+      @s3 ||= ::AWS::S3.new(
+        access_key_id: @config[:key],
+        secret_access_key: @config[:secret]
+      ).buckets[@bucket]
     end
 
     def generate_meta(source)
@@ -162,10 +191,11 @@ module S3MetaSync
 
     def meta_data(source)
       return {} unless File.directory?(source)
-      Dir.chdir(source) do
+      files = Dir.chdir(source) do
         files = Dir["**/*"].select { |f| File.file?(f) }
         Hash[files.map { |file| [file, Digest::MD5.file(file).to_s] }]
       end
+      {files: files}
     end
 
     def read_meta(source)
@@ -175,13 +205,15 @@ module S3MetaSync
 
     def download_meta(destination)
       content = download_content("#{destination}/#{META_FILE}")
-      YAML.load(content)
+      result = YAML.load(content)
+      result.key?(:files) ? result : {files: result} # support new an old format
     rescue
       raise RemoteWithoutMeta
     end
 
-    def download_file(source, path, destination)
+    def download_file(source, path, destination, zip)
       content = download_content("#{source}/#{path}")
+      content = Zip.unzip(content) if zip
       file = "#{destination}/#{path}"
       FileUtils.mkdir_p(File.dirname(file))
       File.write(file, content, :encoding => content.encoding)
@@ -209,8 +241,10 @@ module S3MetaSync
       `find #{destination} -depth -empty -delete`
     end
 
-    def download_files(source, destination, paths)
-      in_multiple_threads(paths) { |path| download_file(source, path, destination) }
+    def download_files(source, destination, paths, zip)
+      in_multiple_threads(paths) do |path|
+        download_file(source, path, destination, zip)
+      end
     end
 
     def upload_files(source, destination, paths)
@@ -247,8 +281,9 @@ module S3MetaSync
 
     def parse_options(argv)
       options = {
-        :key => ENV["AWS_ACCESS_KEY_ID"],
-        :secret => ENV["AWS_SECRET_ACCESS_KEY"]
+        key: ENV["AWS_ACCESS_KEY_ID"],
+        secret: ENV["AWS_SECRET_ACCESS_KEY"],
+        zip: false,
       }
       OptionParser.new do |opts|
         opts.banner = <<-BANNER.gsub(/^ {10}/, "")
@@ -268,7 +303,8 @@ module S3MetaSync
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
         opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
         opts.on("-p", "--parallel COUNT", Integer, "Use COUNT threads for download/upload default: 10") { |c| options[:parallel] = c }
-        opts.on("--ssl-none", "Do not verify ssl certs") { |c| options[:ssl_none] = true }
+        opts.on("--ssl-none", "Do not verify ssl certs") { options[:ssl_none] = true }
+        opts.on("-z", "--zip", "Zip when uploading to save bandwidth") { options[:zip] = true }
         opts.on("-V", "--verbose", "Verbose mode"){ options[:verbose] = true }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
         opts.on("-v", "--version", "Show Version"){ puts VERSION; exit}
