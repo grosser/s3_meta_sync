@@ -3,7 +3,7 @@ require "spec_helper"
 describe S3MetaSync do
   let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
   let(:s3) { AWS::S3.new(:access_key_id => config[:key], :secret_access_key => config[:secret]).buckets[config[:bucket]] }
-  let(:foo_md5) { "---\nxxx: 0976fb571ada412514fe67273780c510\n" }
+  let(:foo_md5) { "---\n:files:\n  xxx: 0976fb571ada412514fe67273780c510\n" }
   let(:syncer) { S3MetaSync::Syncer.new(config) }
 
   def cleanup_s3
@@ -183,7 +183,7 @@ describe S3MetaSync do
       `mkdir foo`
       File.write("foo/utf8", expected)
       syncer.send(:upload_file, "foo", "utf8", "bar")
-      syncer.send(:download_file, "bar", "utf8", "baz")
+      syncer.send(:download_file, "bar", "utf8", "baz", false)
       read = File.read("baz/utf8")
       read.should == expected
       read.encoding.should == Encoding::UTF_8
@@ -192,13 +192,15 @@ describe S3MetaSync do
   end
 
   describe ".parse_options" do
-    after do
-      ENV.delete "AWS_ACCESS_KEY_ID"
-      ENV.delete "AWS_SECRET_ACCESS_KEY"
-    end
+    let(:defaults) { {key: nil, secret: nil, zip: false} }
 
     def call(*args)
       S3MetaSync.send(:parse_options, *args)
+    end
+
+    after do
+      ENV.delete "AWS_ACCESS_KEY_ID"
+      ENV.delete "AWS_SECRET_ACCESS_KEY"
     end
 
     it "fails with empty" do
@@ -214,11 +216,11 @@ describe S3MetaSync do
     end
 
     it "parses source + destination" do
-      call(["x:z", "y"]).should == ["x:z", "y", {:key => nil, :secret => nil}]
+      call(["x:z", "y"]).should == ["x:z", "y", defaults]
     end
 
     it "parses key + secret" do
-      call(["x", "y:z", "--key", "k", "--secret", "s"]).should == ["x", "y:z", {:key => "k", :secret => "s"}]
+      call(["x", "y:z", "--key", "k", "--secret", "s"]).should == ["x", "y:z", defaults.merge(key: "k", secret: "s")]
     end
 
     it "fails with missing key" do
@@ -236,16 +238,20 @@ describe S3MetaSync do
     it "takes key and secret from the environment" do
       ENV["AWS_ACCESS_KEY_ID"] = "k"
       ENV["AWS_SECRET_ACCESS_KEY"] = "s"
-      call(["x", "y:z"]).should == ["x", "y:z", {:key => "k", :secret => "s"}]
+      call(["x", "y:z"]).should == ["x", "y:z", defaults.merge(key: "k", secret: "s")]
     end
 
     it "take verbose mode" do
-      call(["x:z", "y", "-V"]).should == ["x:z", "y", {:key => nil, :secret => nil, :verbose => true}]
-      call(["x:z", "y", "--verbose"]).should == ["x:z", "y", {:key => nil, :secret => nil, :verbose => true}]
+      call(["x:z", "y", "-V"]).should == ["x:z", "y", defaults.merge(:verbose => true)]
+      call(["x:z", "y", "--verbose"]).should == ["x:z", "y", defaults.merge(:verbose => true)]
     end
 
     it "parses --ssl-none" do
-      call(["x:z", "y", "--ssl-none"]).should == ["x:z", "y", {:key => nil, :secret => nil, :ssl_none => true}]
+      call(["x:z", "y", "--ssl-none"]).should == ["x:z", "y", defaults.merge(:ssl_none => true)]
+    end
+
+    it "parses --zip" do
+      call(["x:z", "y", "--zip"]).should == ["x:z", "y", defaults.merge(:zip => true)]
     end
   end
 

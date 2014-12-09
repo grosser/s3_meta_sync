@@ -27,6 +27,8 @@ If a downloaded file is does not match it's md5 sum in .s3-meta-sync, the whole 
     -s, --secret SECRET              AWS secret key
     -r, --region REGION              AWS region if not us-standard
     -p, --parallel COUNT             Use COUNT threads for download/upload default: 10
+        --ssl-none                   Do not verify ssl certs
+    -z, --zip                        Zip when uploading to save bandwidth
     -V, --verbose                    Verbose mode
     -h, --help                       Show this.
     -v, --version                    Show Version
