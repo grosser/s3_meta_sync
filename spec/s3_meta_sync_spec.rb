@@ -173,6 +173,14 @@ describe S3MetaSync do
         syncer.sync("#{config[:bucket]}:bar", "foo")
         File.exist?("foo/yyy").should == false
       end
+
+      it "does download from remote with old .s3-meta-sync format" do
+        old_format = "---\nxxx: 0976fb571ada412514fe67273780c510\n"
+        upload(".s3-meta-sync", old_format)
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        File.read("foo2/xxx").should == "yyy\n"
+        File.read("foo2/.s3-meta-sync").should == old_format
+      end
     end
   end
 

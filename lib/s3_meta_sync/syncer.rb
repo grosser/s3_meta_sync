@@ -75,7 +75,7 @@ module S3MetaSync
           download_files(source, staging_area, download, remote_meta[:zip])
           delete_local_files(staging_area, delete)
           download_file(source, META_FILE, staging_area, false)
-          verify_integrity!(staging_area, destination)
+          verify_integrity!(staging_area, destination, remote_meta[:files])
           delete_empty_folders(staging_area)
           self.class.swap_in_directory(destination, staging_area)
           FileUtils.mkdir(staging_area)
@@ -110,9 +110,7 @@ module S3MetaSync
       FileUtils.remove_dir(delete)
     end
 
-    def verify_integrity!(staging_area, destination)
-      file = "#{staging_area}/#{META_FILE}"
-      remote = YAML.load_file(file)[:files]
+    def verify_integrity!(staging_area, destination, remote)
       actual = meta_data(staging_area)[:files]
 
       if remote != actual
