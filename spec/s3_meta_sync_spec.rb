@@ -98,7 +98,7 @@ describe S3MetaSync do
     end
 
     context "sync remote to local" do
-      let(:no_cred_syncer) { S3MetaSync::Syncer.new(:region => config[:region]) }
+      let(:no_cred_syncer) { S3MetaSync::Syncer.new(:region => config[:region], :no_local_changes => config[:no_local_changes]) }
 
       it "fails when trying to download an empty folder (which would remove everything)" do
         expect {
@@ -181,6 +181,13 @@ describe S3MetaSync do
         File.read("foo2/xxx").should == "yyy\n"
         File.read("foo2/.s3-meta-sync").should == foo_md5
       end
+
+      it "does not re-check local files for changes when --no-local-changes was used" do
+        config[:no_local_changes] = true
+        `echo fff > foo/xxx`
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+        File.read("foo/xxx").should == "fff\n"
+      end
     end
   end
 
@@ -260,6 +267,10 @@ describe S3MetaSync do
 
     it "parses --zip" do
       call(["x:z", "y", "--zip"]).should == ["x:z", "y", defaults.merge(:zip => true)]
+    end
+
+    it "parses --no-local-changes" do
+      call(["x:z", "y", "--no-local-changes"]).should == ["x:z", "y", defaults.merge(:no_local_changes => true)]
     end
   end
 

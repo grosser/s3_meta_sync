@@ -43,8 +43,7 @@ module S3MetaSync
         log "Remote has no .s3-meta-sync, uploading everything", true
         {files: {}}
       end
-      generate_meta(source)
-      local_files = read_meta(source)[:files]
+      local_files = generate_meta(source)[:files]
       remote_files = remote_meta[:files]
       upload = if @config[:zip] == remote_meta[:zip]
         local_files.select { |path, md5| remote_files[path] != md5 || corrupted.include?(path) }
@@ -62,7 +61,8 @@ module S3MetaSync
     def download(source, destination)
       raise if @config[:zip]
       remote_meta = download_meta(source)
-      local_files = meta_data(destination)[:files]
+      local_files = ((@config[:no_local_changes] && read_meta(destination)) || meta_data(destination))[:files]
+
       download = remote_meta[:files].select { |path, md5| local_files[path] != md5 }.map(&:first)
       delete = local_files.keys - remote_meta[:files].keys
 
@@ -167,6 +167,7 @@ module S3MetaSync
       file = "#{source}/#{META_FILE}"
       FileUtils.mkdir_p(File.dirname(file))
       File.write(file, meta.to_yaml)
+      meta
     end
 
     def meta_data(source)
@@ -180,7 +181,7 @@ module S3MetaSync
 
     def read_meta(source)
       file = "#{source}/#{META_FILE}"
-      File.exist?(file) ? YAML.load(File.read(file)) : {}
+      YAML.load(File.read(file)) if File.exist?(file)
     end
 
     def download_meta(destination)
