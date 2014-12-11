@@ -179,7 +179,7 @@ describe S3MetaSync do
         upload(".s3-meta-sync", old_format)
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         File.read("foo2/xxx").should == "yyy\n"
-        File.read("foo2/.s3-meta-sync").should == old_format
+        File.read("foo2/.s3-meta-sync").should == foo_md5
       end
     end
   end

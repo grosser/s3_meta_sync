@@ -62,8 +62,7 @@ module S3MetaSync
     def download(source, destination)
       raise if @config[:zip]
       remote_meta = download_meta(source)
-      generate_meta(destination)
-      local_files = read_meta(destination)[:files]
+      local_files = meta_data(destination)[:files]
       download = remote_meta[:files].select { |path, md5| local_files[path] != md5 }.map(&:first)
       delete = local_files.keys - remote_meta[:files].keys
 
@@ -71,14 +70,16 @@ module S3MetaSync
 
       unless download.empty? && delete.empty?
         Dir.mktmpdir do |staging_area|
+          FileUtils.mkdir_p(destination)
           copy_content(destination, staging_area)
           download_files(source, staging_area, download, remote_meta[:zip])
           delete_local_files(staging_area, delete)
-          download_file(source, META_FILE, staging_area, false)
-          verify_integrity!(staging_area, destination, remote_meta[:files])
           delete_empty_folders(staging_area)
+          store_meta(staging_area, remote_meta)
+
+          verify_integrity!(staging_area, destination, remote_meta[:files])
           self.class.swap_in_directory(destination, staging_area)
-          FileUtils.mkdir(staging_area)
+          FileUtils.mkdir(staging_area) # mktmpdir tries to remove this directory
         end
       end
     end
@@ -159,13 +160,17 @@ module S3MetaSync
     end
 
     def generate_meta(source)
+      store_meta(source, meta_data(source))
+    end
+
+    def store_meta(source, meta)
       file = "#{source}/#{META_FILE}"
       FileUtils.mkdir_p(File.dirname(file))
-      File.write(file, meta_data(source).to_yaml)
+      File.write(file, meta.to_yaml)
     end
 
     def meta_data(source)
-      return {} unless File.directory?(source)
+      return {files: {}} unless File.directory?(source)
       files = Dir.chdir(source) do
         files = Dir["**/*"].select { |f| File.file?(f) }
         Hash[files.map { |file| [file, Digest::MD5.file(file).to_s] }]
