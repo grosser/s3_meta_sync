@@ -29,6 +29,7 @@ If a downloaded file is does not match it's md5 sum in .s3-meta-sync, the whole 
     -p, --parallel COUNT             Use COUNT threads for download/upload default: 10
         --ssl-none                   Do not verify ssl certs
     -z, --zip                        Zip when uploading to save bandwidth
+        --no-local-changes           Do not md5 all the local files, they did not change
     -V, --verbose                    Verbose mode
     -h, --help                       Show this.
     -v, --version                    Show Version
