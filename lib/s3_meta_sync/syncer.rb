@@ -117,8 +117,9 @@ module S3MetaSync
       if remote != actual
         corrupted = actual.select { |file, md5| remote[file] && remote[file] != md5 }.map(&:first)
         File.write("#{destination}/#{CORRUPT_FILES_LOG}", corrupted.join("\n"))
-        log "corrupted files downloaded:\n#{corrupted.join("\n")}", true
-        raise RemoteCorrupt
+        message = "corrupted files downloaded:\n#{corrupted.join("\n")}"
+        log message, true
+        raise RemoteCorrupt, message
       end
     end
 
@@ -137,7 +138,7 @@ module S3MetaSync
     def upload_file(source, path, destination)
       log "Uploading #{path}"
       content = File.read("#{source}/#{path}")
-      content = Zip.zip(content) if @config[:zip]
+      content = Zip.zip(content) if @config[:zip] && path != META_FILE
       s3.objects["#{destination}/#{path}"].write content, :acl => :public_read
     end
 
@@ -176,7 +177,9 @@ module S3MetaSync
         files = Dir["**/*"].select { |f| File.file?(f) }
         Hash[files.map { |file| [file, Digest::MD5.file(file).to_s] }]
       end
-      {files: files}
+      result = {files: files}
+      result[:zip] = @config[:zip] if @config[:zip]
+      result
     end
 
     def read_meta(source)

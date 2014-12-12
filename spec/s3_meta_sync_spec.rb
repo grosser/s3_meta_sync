@@ -95,9 +95,30 @@ describe S3MetaSync do
         File.write("foo/s3-meta-sync-corrupted.log", "something")
         syncer.sync("foo", "#{config[:bucket]}:bar")
       end
+
+      describe "with zip enabled" do
+        def config
+          super.merge(:zip => true)
+        end
+
+        it "uploads files zipped" do
+          file = download("bar/xxx")
+          file.should include "tH{r"
+          S3MetaSync::Zip.unzip(file).should == "yyy\n"
+          download("bar/.s3-meta-sync").should == foo_md5.sub(/\n\z/, "\n:zip: true\n")
+        end
+      end
     end
 
     context "sync remote to local" do
+      def self.it_downloads_into_an_empty_folder
+        it "downloads into an empty folder" do
+          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+          File.read("foo2/xxx").should == "yyy\n"
+          File.read("foo2/.s3-meta-sync").should == foo_md5
+        end
+      end
+
       let(:no_cred_syncer) { S3MetaSync::Syncer.new(:region => config[:region], :no_local_changes => config[:no_local_changes]) }
 
       it "fails when trying to download an empty folder (which would remove everything)" do
@@ -106,12 +127,7 @@ describe S3MetaSync do
         }.to raise_error(S3MetaSync::RemoteWithoutMeta)
       end
 
-      it "downloads into an empty folder" do
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
-        File.read("foo2/xxx").should == "yyy\n"
-        File.read("foo2/.s3-meta-sync").should == foo_md5
-        File.stat("foo2/.s3-meta-sync").mode.to_s(8).should == "100755"
-      end
+      it_downloads_into_an_empty_folder
 
       it "downloads into an absolute folder" do
         no_cred_syncer.sync("#{config[:bucket]}:bar", "#{Dir.pwd}/foo2")
@@ -187,6 +203,17 @@ describe S3MetaSync do
         `echo fff > foo/xxx`
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.read("foo/xxx").should == "fff\n"
+      end
+
+      describe "when uploaded with zip" do
+        def config
+          super.merge(:zip => true)
+        end
+        def foo_md5
+          super.sub(/\n\z/, "\n:zip: true\n")
+        end
+
+        it_downloads_into_an_empty_folder
       end
     end
   end
