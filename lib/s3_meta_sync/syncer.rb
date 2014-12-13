@@ -59,7 +59,6 @@ module S3MetaSync
     end
 
     def download(source, destination)
-      raise if @config[:zip]
       remote_meta = download_meta(source)
       local_files = ((@config[:no_local_changes] && read_meta(destination)) || meta_data(destination))[:files]
 
