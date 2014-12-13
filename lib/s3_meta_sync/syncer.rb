@@ -76,7 +76,7 @@ module S3MetaSync
           delete_empty_folders(staging_area)
           store_meta(staging_area, remote_meta)
 
-          verify_integrity!(staging_area, destination, remote_meta[:files])
+          verify_integrity!(staging_area, destination, download, remote_meta[:files])
           self.class.swap_in_directory(destination, staging_area)
           FileUtils.mkdir(staging_area) # mktmpdir tries to remove this directory
         end
@@ -110,16 +110,15 @@ module S3MetaSync
       FileUtils.remove_dir(delete)
     end
 
-    def verify_integrity!(staging_area, destination, remote)
-      actual = meta_data(staging_area)[:files]
+    def verify_integrity!(staging_area, destination, changed, remote)
+      local = md5_hash(staging_area, changed)
+      corrupted = local.select { |file, md5| remote[file] != md5 }.map(&:first)
+      return if corrupted.empty?
 
-      if remote != actual
-        corrupted = actual.select { |file, md5| remote[file] && remote[file] != md5 }.map(&:first)
-        File.write("#{destination}/#{CORRUPT_FILES_LOG}", corrupted.join("\n"))
-        message = "corrupted files downloaded:\n#{corrupted.join("\n")}"
-        log message, true
-        raise RemoteCorrupt, message
-      end
+      File.write("#{destination}/#{CORRUPT_FILES_LOG}", corrupted.join("\n"))
+      message = "corrupted files downloaded:\n#{corrupted.join("\n")}"
+      log message, true
+      raise RemoteCorrupt, message
     end
 
     def consume_corrupted_files(source)
@@ -172,13 +171,16 @@ module S3MetaSync
 
     def meta_data(source)
       return {files: {}} unless File.directory?(source)
-      files = Dir.chdir(source) do
-        files = Dir["**/*"].select { |f| File.file?(f) }
-        Hash[files.map { |file| [file, Digest::MD5.file(file).to_s] }]
-      end
-      result = {files: files}
+      result = {files: md5_hash(source)}
       result[:zip] = @config[:zip] if @config[:zip]
       result
+    end
+
+    def md5_hash(source, files=nil)
+      Dir.chdir(source) do
+        files ||= Dir["**/*"].select { |f| File.file?(f) }
+        Hash[files.map { |file| [file, Digest::MD5.file(file).to_s] }]
+      end
     end
 
     def read_meta(source)
