@@ -2,13 +2,11 @@ PATH
   remote: .
   specs:
     s3_meta_sync (0.4.5)
-      aws-sdk
+      aws-sdk-v1
 
 GEM
   remote: https://rubygems.org/
   specs:
-    aws-sdk (1.59.1)
-      aws-sdk-v1 (= 1.59.1)
     aws-sdk-v1 (1.59.1)
       json (~> 1.4)
       nokogiri (>= 1.4.4)
