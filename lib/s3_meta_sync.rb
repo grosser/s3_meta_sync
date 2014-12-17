@@ -3,8 +3,8 @@ require "s3_meta_sync/version"
 require "s3_meta_sync/syncer"
 
 module S3MetaSync
-  RemoteWithoutMeta = Class.new(Exception)
-  RemoteCorrupt = Class.new(Exception)
+  RemoteWithoutMeta = Class.new(StandardError)
+  RemoteCorrupt = Class.new(StandardError)
   META_FILE = ".s3-meta-sync"
   CORRUPT_FILES_LOG = "s3-meta-sync-corrupted.log"
 
