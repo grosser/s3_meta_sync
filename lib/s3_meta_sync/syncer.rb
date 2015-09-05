@@ -147,8 +147,14 @@ module S3MetaSync
 
     def delete_local_files(local, paths)
       paths = paths.map { |path| "#{local}/#{path}" }
-      paths.each { |path| log "Deleting #{path}" }
-      File.delete(*paths)
+      paths.each do |path| 
+	log "Deleting #{path}"
+	if  File.file?("#{path}")
+	  File.delete("#{path}")
+	else
+	  log "Can't delete #{path} - file doesn't exist, out-of-date .s3-meta-data file ?", true
+	end
+      end 
     end
 
     def s3
