@@ -152,7 +152,7 @@ module S3MetaSync
 	if  File.file?("#{path}")
 	  File.delete("#{path}")
 	else
-	  log "Can't delete #{path} - file doesn't exist, out-of-date .s3-meta-data file ?", true
+	  log "Can't delete #{path} - a local file doesn't exist. Out-of-date .s3-meta-data file ?", true
 	end
       end 
     end
