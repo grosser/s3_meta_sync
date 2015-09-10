@@ -185,15 +185,19 @@ module S3MetaSync
 
     def read_meta(source)
       file = "#{source}/#{META_FILE}"
-      YAML.load(File.read(file)) if File.exist?(file)
+      parse_yaml_content(File.read(file)) if File.exist?(file)
     end
 
     def download_meta(destination)
       content = download_content("#{destination}/#{META_FILE}")
-      result = YAML.load(content)
-      result.key?(:files) ? result : {files: result} # support new and old format
+      parse_yaml_content(content)
     rescue
       raise RemoteWithoutMeta
+    end
+
+    def parse_yaml_content(content)
+      result = YAML.load(content)
+      result.key?(:files) ? result : {files: result} # support new and old format
     end
 
     def download_file(source, path, destination, zip)

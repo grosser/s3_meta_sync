@@ -209,11 +209,22 @@ describe S3MetaSync do
         File.read("foo2/.s3-meta-sync").should == foo_md5
       end
 
-      it "does not re-check local files for changes when --no-local-changes was used" do
-        config[:no_local_changes] = true
-        sh "echo fff > foo/xxx"
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
-        File.read("foo/xxx").should == "fff\n"
+      describe "with changes and --no-local-changes set" do
+        before do
+          config[:no_local_changes] = true
+          sh "echo fff > foo/xxx"
+        end
+
+        it "does not re-check local files for changes" do
+          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+          File.read("foo/xxx").should == "fff\n"
+        end
+
+        it "downloads with old .s3-meta-sync format" do
+          File.write('foo/.s3-meta-sync', YAML.dump(YAML.load(foo_md5).fetch(:files))) # old format had just files in an array
+          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+          File.read("foo/xxx").should == "fff\n"
+        end
       end
 
       describe "when uploaded with zip" do
