@@ -148,7 +148,7 @@ module S3MetaSync
     def delete_local_files(local, paths)
       paths = paths.map { |path| "#{local}/#{path}" }
       paths.each { |path| log "Deleting #{path}" }
-      File.delete(*paths)
+      FileUtils.rm_f(paths)
     end
 
     def s3

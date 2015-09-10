@@ -220,6 +220,12 @@ describe S3MetaSync do
           File.read("foo/xxx").should == "fff\n"
         end
 
+        it "does not fail when unneeded local files for do not exist" do
+          File.open('foo/.s3-meta-sync', 'a+') { |f| f.puts "  gone: 1976fb571ada412514fe67273780c510\n  nested/gone: 2976fb571ada412514fe67273780c510" }
+          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+          File.read("foo/xxx").should == "fff\n"
+        end
+
         it "downloads with old .s3-meta-sync format" do
           File.write('foo/.s3-meta-sync', YAML.dump(YAML.load(foo_md5).fetch(:files))) # old format had just files in an array
           no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
