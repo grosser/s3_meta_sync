@@ -67,7 +67,7 @@ module S3MetaSync
 
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
-      unless download.empty? && delete.empty?
+      if download.any? || delete.any?
         Dir.mktmpdir do |staging_area|
           FileUtils.mkdir_p(destination)
           copy_content(destination, staging_area)
@@ -191,7 +191,7 @@ module S3MetaSync
     def download_meta(destination)
       content = download_content("#{destination}/#{META_FILE}")
       result = YAML.load(content)
-      result.key?(:files) ? result : {files: result} # support new an old format
+      result.key?(:files) ? result : {files: result} # support new and old format
     rescue
       raise RemoteWithoutMeta
     end

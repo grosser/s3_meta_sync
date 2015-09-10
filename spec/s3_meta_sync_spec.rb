@@ -1,6 +1,12 @@
 require "spec_helper"
 
 describe S3MetaSync do
+  def sh(command, options={})
+    result = `#{command} #{"2>&1" unless options[:keep_output]}`
+    raise "#{options[:fail] ? "SUCCESS" : "FAIL"} #{command}\n#{result}" if $?.success? == !!options[:fail]
+    result
+  end
+
   let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
   let(:s3) { AWS::S3.new(:access_key_id => config[:key], :secret_access_key => config[:secret]).buckets[config[:bucket]] }
   let(:foo_md5) { "---\n:files:\n  xxx: 0976fb571ada412514fe67273780c510\n" }
@@ -11,7 +17,7 @@ describe S3MetaSync do
   end
 
   def upload_simple_structure
-    `mkdir foo && echo yyy > foo/xxx`
+    sh "mkdir foo && echo yyy > foo/xxx"
     syncer.sync("foo", "#{config[:bucket]}:bar")
   end
 
@@ -59,7 +65,7 @@ describe S3MetaSync do
       end
 
       it "removes obsolete files" do
-        `rm foo/xxx && echo yyy > foo/zzz`
+        sh "rm foo/xxx && echo yyy > foo/zzz"
         syncer.sync("foo", "#{config[:bucket]}:bar")
         download("bar/xxx").should == nil
         download("bar/zzz").should == "yyy\n"
@@ -150,20 +156,25 @@ describe S3MetaSync do
       end
 
       it "deletes obsolete local files" do
-        `echo yyy > foo/zzz`
+        sh "echo yyy > foo/zzz"
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.exist?("foo/zzz").should == false
       end
 
       it "removes empty folders" do
-        raise unless system "mkdir foo/baz"
-        raise unless system "echo dssdf > foo/baz/will_be_deleted"
+        sh "mkdir foo/baz"
+        sh "echo dssdf > foo/baz/will_be_deleted"
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.exist?("foo/baz").should == false
       end
 
+      it "does not fail when local files that no longer exist are mentioned in local .s3-meta-sync" do
+        File.open('foo/.s3-meta-sync', 'a+') { |f| f.puts "  gone: 1976fb571ada412514fe67273780c510\n  nested/gone: 2976fb571ada412514fe67273780c510" }
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+      end
+
       it "overwrites locally changed files" do
-        `echo fff > foo/xxx`
+        sh "echo fff > foo/xxx"
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.read("foo/xxx").should == "yyy\n"
       end
@@ -200,7 +211,7 @@ describe S3MetaSync do
 
       it "does not re-check local files for changes when --no-local-changes was used" do
         config[:no_local_changes] = true
-        `echo fff > foo/xxx`
+        sh "echo fff > foo/xxx"
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.read("foo/xxx").should == "fff\n"
       end
@@ -222,7 +233,7 @@ describe S3MetaSync do
     with_utf8_encoding do
       syncer.instance_variable_set(:@bucket, config[:bucket])
       expected = "…"
-      `mkdir foo`
+      sh "mkdir foo"
       File.write("foo/utf8", expected)
       syncer.send(:upload_file, "foo", "utf8", "bar")
       syncer.send(:download_file, "bar", "utf8", "baz", false)
@@ -350,12 +361,6 @@ describe S3MetaSync do
       sh("#{Bundler.root}/bin/s3-meta-sync #{command}", options)
     end
 
-    def sh(command, options={})
-      result = `#{command} #{"2>&1" unless options[:keep_output]}`
-      raise "#{options[:fail] ? "SUCCESS" : "FAIL"} #{command}\n#{result}" if $?.success? == !!options[:fail]
-      result
-    end
-
     it "shows --version" do
       sync("--version").should include(S3MetaSync::VERSION)
     end
@@ -367,7 +372,7 @@ describe S3MetaSync do
     context "upload" do
       around do |test|
         begin
-          `mkdir foo && echo yyy > foo/xxx`
+          sh "mkdir foo && echo yyy > foo/xxx"
           test.call
         ensure
           cleanup_s3
