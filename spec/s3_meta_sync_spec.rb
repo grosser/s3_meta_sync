@@ -1,4 +1,5 @@
 require "spec_helper"
+require "open-uri"
 
 describe S3MetaSync do
   let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
@@ -16,7 +17,8 @@ describe S3MetaSync do
   end
 
   def download(file)
-    open("https://s3-us-west-2.amazonaws.com/#{config[:bucket]}/#{file}").read
+    url=URI.parse("https://s3.amazonaws.com/#{config[:bucket]}/#{file}")
+    open(url).read
   rescue
     nil
   end
@@ -153,6 +155,12 @@ describe S3MetaSync do
         `echo yyy > foo/zzz`
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
         File.exist?("foo/zzz").should == false
+      end
+    
+      it "passes by local files that no longer exist but described in .s3-meta-sync" do
+	`echo foo/wrong: 6cf4485094745f1e1815eb2c7ef46d5c >> .s3-meta-sync`
+	File.read('.s3-meta-sync').should_not == "6cf4485094745f1e1815eb2c7ef46d5c"
+	no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
       end
 
       it "removes empty folders" do
@@ -345,7 +353,7 @@ describe S3MetaSync do
   end
 
   describe "CLI" do
-    let(:params) { "--key #{config[:key]} --secret #{config[:secret]} --region #{config[:region]}" }
+    let(:params) { "--key #{config[:key]} --secret #{config[:secret]} " }
     def sync(command, options={})
       sh("#{Bundler.root}/bin/s3-meta-sync #{command}", options)
     end
@@ -387,6 +395,14 @@ describe S3MetaSync do
           Uploading xxx
           Uploading .s3-meta-sync
         TXT
+      end
+
+      it "does download from remote with old .s3-meta-sync format if --no-local-changes set" do
+	sync("foo #{config[:bucket]}:bar #{params}")
+        `sed '/^:/d' ./foo/.s3-meta-sync > $TMPDIR/s3-tmp`
+        `mv $TMPDIR/s3-tmp ./foo/.s3-meta-sync`
+	result=`#{Bundler.root}/bin/s3-meta-sync #{config[:bucket]}:bar foo --no-local-changes 2>&1`
+	result.should_not =~ /NoMethodError/
       end
     end
   end

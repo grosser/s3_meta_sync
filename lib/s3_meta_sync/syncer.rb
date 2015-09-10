@@ -147,8 +147,14 @@ module S3MetaSync
 
     def delete_local_files(local, paths)
       paths = paths.map { |path| "#{local}/#{path}" }
-      paths.each { |path| log "Deleting #{path}" }
-      File.delete(*paths)
+      paths.each do |path| 
+	log "Deleting #{path}"
+	if  File.file?("#{path}")
+	  File.delete("#{path}")
+	else
+	  log "Can't delete #{path} - a local file doesn't exist. Out-of-date .s3-meta-data file ?", true
+	end
+      end 
     end
 
     def s3
@@ -185,13 +191,15 @@ module S3MetaSync
 
     def read_meta(source)
       file = "#{source}/#{META_FILE}"
-      YAML.load(File.read(file)) if File.exist?(file)
+      #YAML.load(File.read(file)) if File.exist?(file)
+      result = YAML.load(File.read(file)) if File.exist?(file)
+      result.key?(:files) ? result : {files: result} #support new and old format
     end
 
     def download_meta(destination)
       content = download_content("#{destination}/#{META_FILE}")
       result = YAML.load(content)
-      result.key?(:files) ? result : {files: result} # support new an old format
+      result.key?(:files) ? result : {files: result} # support new and old format
     rescue
       raise RemoteWithoutMeta
     end
