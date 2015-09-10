@@ -396,6 +396,14 @@ describe S3MetaSync do
           Uploading .s3-meta-sync
         TXT
       end
+
+      it "does download from remote with old .s3-meta-sync format if --no-local-changes set" do
+	sync("foo #{config[:bucket]}:bar #{params}")
+        `sed '/^:/d' ./foo/.s3-meta-sync > $TMPDIR/s3-tmp`
+        `mv $TMPDIR/s3-tmp ./foo/.s3-meta-sync`
+	result=`#{Bundler.root}/bin/s3-meta-sync #{config[:bucket]}:bar foo --no-local-changes 2>&1`
+	result.should_not =~ /NoMethodError/
+      end
     end
   end
 end
