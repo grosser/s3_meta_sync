@@ -22,7 +22,13 @@ describe S3MetaSync do
   end
 
   def download(file)
-    open("https://s3-us-west-2.amazonaws.com/#{config[:bucket]}/#{file}").read
+    region = config[:region]
+    region = if region && region != S3MetaSync::Syncer::DEFAULT_REGION
+      "-#{region}"
+    else
+      nil
+    end
+    open("https://s3#{region}.amazonaws.com/#{config[:bucket]}/#{file}").read
   rescue
     nil
   end

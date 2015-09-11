@@ -17,6 +17,8 @@ require "s3_meta_sync/zip"
 
 module S3MetaSync
   class Syncer
+    DEFAULT_REGION = 'us-east-1'
+
     def initialize(config)
       @config = config
     end
@@ -241,7 +243,8 @@ module S3MetaSync
     end
 
     def region
-      @config[:region] unless @config[:region].to_s.empty?
+      region = @config[:region]
+      region if region != DEFAULT_REGION
     end
 
     def in_multiple_threads(data)
