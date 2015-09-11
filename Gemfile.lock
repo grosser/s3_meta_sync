@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    s3_meta_sync (0.4.6)
+    s3_meta_sync (0.5.0)
       aws-sdk-v1
 
 GEM
@@ -40,3 +40,6 @@ DEPENDENCIES
   rake
   rspec (~> 2)
   s3_meta_sync!
+
+BUNDLED WITH
+   1.10.6
