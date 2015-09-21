@@ -139,6 +139,13 @@ describe S3MetaSync do
         }.to raise_error(S3MetaSync::RemoteWithoutMeta)
       end
 
+      it "retries when trying to download an empty folder" do
+        expect {
+          no_cred_syncer.should_receive(:download_content).with(anything).exactly(2).and_raise(RuntimeError.new("Unable to download https://s3-us-west-2.amazonaws.com/s3-meta-sync/bar/.s3-meta-sync -- 404 Not Found"))
+          no_cred_syncer.sync("#{config[:bucket]}:baz", "foo")
+        }.to raise_error(S3MetaSync::RemoteWithoutMeta)
+      end
+
       it_downloads_into_an_empty_folder
 
       it "downloads into an absolute folder" do

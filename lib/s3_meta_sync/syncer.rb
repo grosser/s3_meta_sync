@@ -194,7 +194,14 @@ module S3MetaSync
       content = download_content("#{destination}/#{META_FILE}")
       parse_yaml_content(content)
     rescue
-      raise RemoteWithoutMeta
+      retries ||= 1
+      if retries == 2
+        raise RemoteWithoutMeta
+      else
+        retries += 1
+        sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
+        retry
+      end
     end
 
     def parse_yaml_content(content)
