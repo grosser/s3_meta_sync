@@ -421,7 +421,9 @@ describe S3MetaSync do
       end
 
       it "is verbose" do
-        sync("foo #{config[:bucket]}:bar #{params} --verbose").strip.should == <<-TXT.gsub(/^ {10}/, "").strip
+        result = sync("foo #{config[:bucket]}:bar #{params} --verbose").strip
+        result.should == <<-TXT.gsub(/^ {10}/, "").strip
+          Downloading bar/.s3-meta-sync
           Downloading bar/.s3-meta-sync
           Remote has no .s3-meta-sync, uploading everything
           Uploading: 1 Deleting: 0
