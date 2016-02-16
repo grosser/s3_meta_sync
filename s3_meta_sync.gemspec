@@ -8,6 +8,6 @@ Gem::Specification.new name, S3MetaSync::VERSION do |s|
   s.homepage = "https://github.com/grosser/#{name}"
   s.files = `git ls-files lib/ bin/`.split("\n")
   s.license = "MIT"
-  s.add_runtime_dependency "aws-sdk-v1"
+  s.add_runtime_dependency "aws-sdk", '~> 2.0'
   s.executables = ["s3-meta-sync"]
 end

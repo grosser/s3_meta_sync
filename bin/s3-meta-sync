@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
 $LOAD_PATH << File.expand_path("../../lib", __FILE__)
-require "rubygems" if RUBY_VERSION < "1.9"
 require "s3_meta_sync"
 exit S3MetaSync.run(ARGV)

@@ -4,15 +4,7 @@ require "digest/md5"
 require "fileutils"
 require "tmpdir"
 
-require "aws/s3"
-
-if RUBY_VERSION < "2.0.0"
-  # need to require these or upload in multiple threads will fail on systems with high load
-  require "aws/s3/s3_object"
-  require "aws/core/response"
-  require "aws/s3/object_collection"
-end
-
+require "aws-sdk"
 require "s3_meta_sync/zip"
 
 module S3MetaSync
@@ -139,12 +131,17 @@ module S3MetaSync
       log "Uploading #{path}"
       content = File.read("#{source}/#{path}")
       content = Zip.zip(content) if @config[:zip] && path != META_FILE
-      s3.objects["#{destination}/#{path}"].write content, :acl => :public_read
+      s3.object("#{destination}/#{path}").put body: content, :acl => 'public-read'
     end
 
     def delete_remote_files(remote, paths)
       paths.each { |path| log "Deleting #{@bucket}:#{remote}/#{path}" }
-      s3.objects.delete paths.map { |path| "#{remote}/#{path}" }
+      if paths.any?
+        s3.delete_objects(
+          delete: { objects: paths.map { |path| {key: "#{remote}/#{path}"} } },
+          request_payer: "requester"
+        )
+      end
     end
 
     def delete_local_files(local, paths)
@@ -154,10 +151,11 @@ module S3MetaSync
     end
 
     def s3
-      @s3 ||= ::AWS::S3.new(
+      @s3 ||= ::Aws::S3::Resource.new(
         access_key_id: @config[:key],
-        secret_access_key: @config[:secret]
-      ).buckets[@bucket]
+        secret_access_key: @config[:secret],
+        region: @config[:region] || 'us-west-2'
+      ).bucket(@bucket)
     end
 
     def generate_meta(source)

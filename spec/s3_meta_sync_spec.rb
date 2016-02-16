@@ -8,7 +8,13 @@ describe S3MetaSync do
   end
 
   let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
-  let(:s3) { AWS::S3.new(:access_key_id => config[:key], :secret_access_key => config[:secret]).buckets[config[:bucket]] }
+  let(:s3) do
+    ::Aws::S3::Resource.new(
+      access_key_id: config[:key],
+      secret_access_key: config[:secret],
+      region: 'us-west-2'
+    ).bucket(config[:bucket])
+  end
   let(:foo_md5) { "---\n:files:\n  xxx: 0976fb571ada412514fe67273780c510\n" }
   let(:syncer) { S3MetaSync::Syncer.new(config) }
 
@@ -415,7 +421,9 @@ describe S3MetaSync do
       end
 
       it "is verbose" do
-        sync("foo #{config[:bucket]}:bar #{params} --verbose").strip.should == <<-TXT.gsub(/^ {10}/, "").strip
+        result = sync("foo #{config[:bucket]}:bar #{params} --verbose").strip
+        result.should == <<-TXT.gsub(/^ {10}/, "").strip
+          Downloading bar/.s3-meta-sync
           Downloading bar/.s3-meta-sync
           Remote has no .s3-meta-sync, uploading everything
           Uploading: 1 Deleting: 0
