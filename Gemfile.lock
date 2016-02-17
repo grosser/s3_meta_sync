@@ -2,17 +2,13 @@ PATH
   remote: .
   specs:
     s3_meta_sync (0.6.0)
-      aws-sdk (~> 2.0)
+      aws-sdk-core (~> 2.0)
 
 GEM
   remote: https://rubygems.org/
   specs:
-    aws-sdk (2.2.16)
-      aws-sdk-resources (= 2.2.16)
     aws-sdk-core (2.2.16)
       jmespath (~> 1.0)
-    aws-sdk-resources (2.2.16)
-      aws-sdk-core (= 2.2.16)
     bump (0.3.9)
     byebug (2.6.0)
       columnize (~> 0.3)

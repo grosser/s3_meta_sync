@@ -9,17 +9,19 @@ describe S3MetaSync do
 
   let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
   let(:s3) do
-    ::Aws::S3::Resource.new(
+    ::Aws::S3::Client.new(
       access_key_id: config[:key],
       secret_access_key: config[:secret],
       region: 'us-west-2'
-    ).bucket(config[:bucket])
+    )
   end
+  let(:bucket) { config[:bucket] }
   let(:foo_md5) { "---\n:files:\n  xxx: 0976fb571ada412514fe67273780c510\n" }
   let(:syncer) { S3MetaSync::Syncer.new(config) }
 
   def cleanup_s3
-    s3.objects.each { |o| o.delete }
+    keys = s3.list_objects(bucket: bucket).contents.map { |o| {key: o.key} }
+    s3.delete_objects(bucket: bucket, delete: {objects: keys})
   end
 
   def upload_simple_structure

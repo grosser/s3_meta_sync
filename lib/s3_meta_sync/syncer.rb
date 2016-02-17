@@ -4,7 +4,7 @@ require "digest/md5"
 require "fileutils"
 require "tmpdir"
 
-require "aws-sdk"
+require "aws-sdk-core"
 require "s3_meta_sync/zip"
 
 module S3MetaSync
@@ -131,7 +131,12 @@ module S3MetaSync
       log "Uploading #{path}"
       content = File.read("#{source}/#{path}")
       content = Zip.zip(content) if @config[:zip] && path != META_FILE
-      s3.object("#{destination}/#{path}").put body: content, :acl => 'public-read'
+      s3.put_object(
+        bucket: @bucket,
+        body: content,
+        key: "#{destination}/#{path}",
+        acl: 'public-read'
+      )
     end
 
     def delete_remote_files(remote, paths)
@@ -139,7 +144,8 @@ module S3MetaSync
       if paths.any?
         s3.delete_objects(
           delete: { objects: paths.map { |path| {key: "#{remote}/#{path}"} } },
-          request_payer: "requester"
+          request_payer: "requester",
+          bucket: @bucket
         )
       end
     end
@@ -151,11 +157,11 @@ module S3MetaSync
     end
 
     def s3
-      @s3 ||= ::Aws::S3::Resource.new(
+      @s3 ||= ::Aws::S3::Client.new(
         access_key_id: @config[:key],
         secret_access_key: @config[:secret],
         region: @config[:region] || 'us-west-2'
-      ).bucket(@bucket)
+      )
     end
 
     def generate_meta(source)
