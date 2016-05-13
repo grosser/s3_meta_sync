@@ -3,6 +3,7 @@ require "yaml"
 require "digest/md5"
 require "fileutils"
 require "tmpdir"
+require "openssl"
 
 require "aws-sdk-core"
 require "s3_meta_sync/zip"
@@ -197,7 +198,7 @@ module S3MetaSync
     def download_meta(destination)
       content = download_content("#{destination}/#{META_FILE}")
       parse_yaml_content(content)
-    rescue
+    rescue OpenURI::HTTPError
       retries ||= 1
       if retries == 2
         raise RemoteWithoutMeta
@@ -227,7 +228,8 @@ module S3MetaSync
       options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
       open(url, options).read
     rescue OpenURI::HTTPError
-      raise "Unable to download #{url} -- #{$!}"
+      $!.message << " -- while trying to download #{url}"
+      raise
     rescue OpenSSL::SSL::SSLError
       retries ||= 0
       retries += 1
