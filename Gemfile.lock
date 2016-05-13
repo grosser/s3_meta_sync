@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    s3_meta_sync (0.6.1)
+    s3_meta_sync (0.6.2)
       aws-sdk-core (~> 2.0)
 
 GEM
@@ -38,4 +38,4 @@ DEPENDENCIES
   s3_meta_sync!
 
 BUNDLED WITH
-   1.11.2
+   1.12.3
