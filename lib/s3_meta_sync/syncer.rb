@@ -132,12 +132,17 @@ module S3MetaSync
       log "Uploading #{path}"
       content = File.read("#{source}/#{path}")
       content = Zip.zip(content) if @config[:zip] && path != META_FILE
-      s3.put_object(
+
+      object = {
         bucket: @bucket,
         body: content,
         key: "#{destination}/#{path}",
         acl: 'public-read'
-      )
+      }
+
+      object[:server_side_encryption] = @config[:server_side_encryption] if @config[:server_side_encryption]
+
+      s3.put_object(object)
     end
 
     def delete_remote_files(remote, paths)

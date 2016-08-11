@@ -116,6 +116,13 @@ describe S3MetaSync do
         syncer.sync("foo", "#{config[:bucket]}:bar")
       end
 
+      it "has no server_side_encryption setting by default" do
+        syncer.stub(:s3) { s3 }
+        s3.should_receive(:put_object).with(hash_excluding(:server_side_encryption))
+
+        syncer.sync("foo", "#{config[:bucket]}:bar")
+      end
+
       describe "with zip enabled" do
         def config
           super.merge(:zip => true)
@@ -126,6 +133,19 @@ describe S3MetaSync do
           file.should include "tH{r"
           S3MetaSync::Zip.unzip(file).should == "yyy\n"
           download("bar/.s3-meta-sync").should == foo_md5.sub(/\n\z/, "\n:zip: true\n")
+        end
+      end
+
+      describe "server_side_encryption specified by the config" do
+        def config
+          super.merge(:server_side_encryption => "AES256")
+        end
+
+        it "uses the server_side_encryption method set in the config" do
+          syncer.stub(:s3) { s3 }
+          s3.should_receive(:put_object).with(hash_including(:server_side_encryption => "AES256"))
+
+          syncer.sync("foo", "#{config[:bucket]}:bar")
         end
       end
     end
