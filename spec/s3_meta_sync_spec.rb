@@ -52,7 +52,7 @@ describe S3MetaSync do
   def upload(file, content)
     File.write("foo/#{file}", content)
     syncer.send(:upload_file, "foo", file, "bar")
-    syncer.send(:download_content, "bar/#{file}").should == content
+    expect(syncer.send(:download_content, "bar/#{file}")).to eq(content)
   end
 
   around do |test|
@@ -62,32 +62,34 @@ describe S3MetaSync do
   end
 
   it "has a VERSION" do
-    S3MetaSync::VERSION.should =~ /^[\.\da-z]+$/
+    expect(S3MetaSync::VERSION).to match(/^[\.\da-z]+$/)
   end
 
   describe "#sync" do
     before do
-      $stderr.stub(:puts)
+      allow($stderr).to receive(:puts)
       upload_simple_structure
     end
     after { cleanup_s3 }
 
     context "sync local to remote" do
       it "uploads files" do
-        download("bar/xxx").should == "yyy\n"
-        download("bar/.s3-meta-sync").should == foo_md5
+        expect(download("bar/xxx")).to eq("yyy\n")
+        expect(download("bar/.s3-meta-sync")).to eq(foo_md5)
       end
 
       it "removes obsolete files" do
         sh "rm foo/xxx && echo yyy > foo/zzz"
         syncer.sync("foo", "#{config[:bucket]}:bar")
-        download("bar/xxx").should == nil
-        download("bar/zzz").should == "yyy\n"
+
+        expect(download("bar/xxx")).to be_nil
+        expect(download("bar/zzz")).to eq("yyy\n")
       end
 
       it "does not upload/delete when nothing needs to be done" do
-        syncer.should_receive(:upload_file).with("foo", ".s3-meta-sync", "bar")
-        syncer.should_not_receive(:delete_remote_file)
+        expect(syncer).to receive(:upload_file).with("foo", ".s3-meta-sync", "bar")
+        expect(syncer).not_to receive(:delete_remote_file)
+
         syncer.sync("foo", "#{config[:bucket]}:bar")
       end
 
@@ -100,15 +102,15 @@ describe S3MetaSync do
         expect {
           syncer.sync("#{config[:bucket]}:bar", "foo")
         }.to raise_error(S3MetaSync::RemoteCorrupt)
-        File.read("foo/s3-meta-sync-corrupted.log").should == "xxx"
+        expect(File.read("foo/s3-meta-sync-corrupted.log")).to eq("xxx")
 
         # uploader should see the log and force a upload
         File.write("foo/xxx", old) # same md5 so normally would not upload
         syncer.sync("foo", "#{config[:bucket]}:bar")
-        syncer.send(:download_content, "bar/xxx").should == old
+        expect(syncer.send(:download_content, "bar/xxx")).to eq(old)
 
         # log got consumed
-        File.exist?("foo/s3-meta-sync-corrupted.log").should == false
+        expect(File.exist?("foo/s3-meta-sync-corrupted.log")).to be false
       end
 
       it "does upload files that were corrupt but no longer exist" do
@@ -117,33 +119,33 @@ describe S3MetaSync do
       end
 
       it "has no server_side_encryption setting by default" do
-        syncer.stub(:s3) { s3 }
-        s3.should_receive(:put_object).with(hash_excluding(:server_side_encryption))
+        allow(syncer).to receive(:s3) { s3 }
+        expect(s3).to receive(:put_object).with(hash_excluding(:server_side_encryption))
 
         syncer.sync("foo", "#{config[:bucket]}:bar")
       end
 
       describe "with zip enabled" do
         def config
-          super.merge(:zip => true)
+          super.merge(zip: true)
         end
 
         it "uploads files zipped" do
           file = download("bar/xxx")
-          file.should include "tH{r"
-          S3MetaSync::Zip.unzip(file).should == "yyy\n"
-          download("bar/.s3-meta-sync").should == foo_md5.sub(/\n\z/, "\n:zip: true\n")
+          expect(file).to include "tH{r"
+          expect(S3MetaSync::Zip.unzip(file)).to eq("yyy\n")
+          expect(download("bar/.s3-meta-sync")).to eq(foo_md5.sub(/\n\z/, "\n:zip: true\n"))
         end
       end
 
       describe "server_side_encryption specified by the config" do
         def config
-          super.merge(:server_side_encryption => "AES256")
+          super.merge(server_side_encryption: "AES256")
         end
 
         it "uses the server_side_encryption method set in the config" do
-          syncer.stub(:s3) { s3 }
-          s3.should_receive(:put_object).with(hash_including(:server_side_encryption => "AES256"))
+          allow(syncer).to receive(:s3) { s3 }
+          expect(s3).to receive(:put_object).with(hash_including(server_side_encryption: "AES256"))
 
           syncer.sync("foo", "#{config[:bucket]}:bar")
         end
@@ -154,12 +156,12 @@ describe S3MetaSync do
       def self.it_downloads_into_an_empty_folder
         it "downloads into an empty folder" do
           no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
-          File.read("foo2/xxx").should == "yyy\n"
-          File.read("foo2/.s3-meta-sync").should == foo_md5
+          expect(File.read("foo2/xxx")).to eq("yyy\n")
+          expect(File.read("foo2/.s3-meta-sync")).to eq(foo_md5)
         end
       end
 
-      let(:no_cred_syncer) { S3MetaSync::Syncer.new(:region => config[:region], :no_local_changes => config[:no_local_changes]) }
+      let(:no_cred_syncer) { S3MetaSync::Syncer.new(region: config[:region], no_local_changes: config[:no_local_changes]) }
 
       it "fails when trying to download an empty folder (which would remove everything)" do
         expect {
@@ -169,7 +171,7 @@ describe S3MetaSync do
 
       it "retries when trying to download an empty folder" do
         expect {
-          no_cred_syncer.should_receive(:download_content).with(anything).exactly(2).and_raise(OpenURI::HTTPError.new(1111, "Unable to download https://s3-us-west-2.amazonaws.com/s3-meta-sync/bar/.s3-meta-sync -- 404 Not Found"))
+          expect(no_cred_syncer).to receive(:download_content).with(anything).exactly(2).and_raise(OpenURI::HTTPError.new(1111, "Unable to download https://s3-us-west-2.amazonaws.com/s3-meta-sync/bar/.s3-meta-sync -- 404 Not Found"))
           no_cred_syncer.sync("#{config[:bucket]}:baz", "foo")
         }.to raise_error(S3MetaSync::RemoteWithoutMeta)
       end
@@ -178,35 +180,40 @@ describe S3MetaSync do
 
       it "downloads into an absolute folder" do
         no_cred_syncer.sync("#{config[:bucket]}:bar", "#{Dir.pwd}/foo2")
-        File.read("foo2/xxx").should == "yyy\n"
-        File.read("foo2/.s3-meta-sync").should == foo_md5
+        expect(File.read("foo2/xxx")).to eq("yyy\n")
+        expect(File.read("foo2/.s3-meta-sync")).to eq(foo_md5)
       end
 
       it "does not leave tempdirs behind" do
         dir = File.dirname(Dir.mktmpdir)
         before = Dir["#{dir}/*"].size
+
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         after = Dir["#{dir}/*"].size
-        after.should == before
+
+        expect(after).to eq(before)
       end
 
       it "downloads nothing when everything is up to date" do
-        no_cred_syncer.should_not_receive(:download_file)
-        no_cred_syncer.should_not_receive(:delete_local_files)
+        expect(no_cred_syncer).not_to receive(:download_file)
+        expect(no_cred_syncer).not_to receive(:delete_local_files)
+
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
       end
 
       it "deletes obsolete local files" do
         sh "echo yyy > foo/zzz"
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
-        File.exist?("foo/zzz").should == false
+
+        expect(File.exist?("foo/zzz")).to be false
       end
 
       it "removes empty folders" do
         sh "mkdir foo/baz"
         sh "echo dssdf > foo/baz/will_be_deleted"
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
-        File.exist?("foo/baz").should == false
+
+        expect(File.exist?("foo/baz")).to be false
       end
 
       it "does not fail when local files that no longer exist are mentioned in local .s3-meta-sync" do
@@ -217,7 +224,8 @@ describe S3MetaSync do
       it "overwrites locally changed files" do
         sh "echo fff > foo/xxx"
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
-        File.read("foo/xxx").should == "yyy\n"
+
+        expect(File.read("foo/xxx")).to eq("yyy\n")
       end
 
       it "does not overwrite local files when md5 does not match" do
@@ -232,22 +240,25 @@ describe S3MetaSync do
         expect {
           no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         }.to raise_error S3MetaSync::RemoteCorrupt
-        File.read("foo2/xxx").should == "old"
+
+        expect(File.read("foo2/xxx")).to eq("old")
       end
 
       it "does not consider additional files on s3 as corrupted" do
         upload "yyy", "not-tracked"
         File.unlink("foo/yyy")
         syncer.sync("#{config[:bucket]}:bar", "foo")
-        File.exist?("foo/yyy").should == false
+
+        expect(File.exist?("foo/yyy")).to be false
       end
 
       it "does download from remote with old .s3-meta-sync format" do
         old_format = "---\nxxx: 0976fb571ada412514fe67273780c510\n"
         upload(".s3-meta-sync", old_format)
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
-        File.read("foo2/xxx").should == "yyy\n"
-        File.read("foo2/.s3-meta-sync").should == foo_md5
+
+        expect(File.read("foo2/xxx")).to eq("yyy\n")
+        expect(File.read("foo2/.s3-meta-sync")).to eq(foo_md5)
       end
 
       describe "with changes and --no-local-changes set" do
@@ -258,25 +269,28 @@ describe S3MetaSync do
 
         it "does not re-check local files for changes" do
           no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
-          File.read("foo/xxx").should == "fff\n"
+
+          expect(File.read("foo/xxx")).to eq("fff\n")
         end
 
         it "does not fail when unneeded local files for do not exist" do
           File.open('foo/.s3-meta-sync', 'a+') { |f| f.puts "  gone: 1976fb571ada412514fe67273780c510\n  nested/gone: 2976fb571ada412514fe67273780c510" }
           no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
-          File.read("foo/xxx").should == "fff\n"
+
+          expect(File.read("foo/xxx")).to eq("fff\n")
         end
 
         it "downloads with old .s3-meta-sync format" do
           File.write('foo/.s3-meta-sync', YAML.dump(YAML.load(foo_md5).fetch(:files))) # old format had just files in an array
           no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
-          File.read("foo/xxx").should == "fff\n"
+
+          expect(File.read("foo/xxx")).to eq("fff\n")
         end
       end
 
       describe "when uploaded with zip" do
         def config
-          super.merge(:zip => true)
+          super.merge(zip: true)
         end
         def foo_md5
           super.sub(/\n\z/, "\n:zip: true\n")
@@ -296,9 +310,10 @@ describe S3MetaSync do
       syncer.send(:upload_file, "foo", "utf8", "bar")
       syncer.send(:download_file, "bar", "utf8", "baz", false)
       read = File.read("baz/utf8")
-      read.should == expected
-      read.encoding.should == Encoding::UTF_8
-      read[/…/].should == "…"
+
+      expect(read).to eq(expected)
+      expect(read.encoding).to eq(Encoding::UTF_8)
+      expect(read[/…/]).to eq("…")
     end
   end
 
@@ -315,80 +330,81 @@ describe S3MetaSync do
     end
 
     it "fails with empty" do
-      expect { call([]) }.to raise_error
+      expect { call([]) }.to raise_error(StandardError)
     end
 
     it "fails with 2 remotes" do
-      expect { call(["x:z", "z:y", "--key", "k", "--secret", "s"]) }.to raise_error
+      expect { call(["x:z", "z:y", "--key", "k", "--secret", "s"]) }.to raise_error(StandardError)
     end
 
     it "fails with 2 locals" do
-      expect { call(["x", "z"]) }.to raise_error
+      expect { call(["x", "z"]) }.to raise_error(StandardError)
     end
 
     it "parses source + destination" do
-      call(["x:z", "y"]).should == ["x:z", "y", defaults]
+      expect(call(["x:z", "y"])).to eq(["x:z", "y", defaults])
     end
 
     it "parses key + secret" do
-      call(["x", "y:z", "--key", "k", "--secret", "s"]).should == ["x", "y:z", defaults.merge(key: "k", secret: "s")]
+      expect(call(["x", "y:z", "--key", "k", "--secret", "s"])).to eq(["x", "y:z", defaults.merge(key: "k", secret: "s")])
     end
 
     it "fails with missing key" do
-      expect { call(["x", "y:z", "--secret", "s"]) }.to raise_error
+      expect { call(["x", "y:z", "--secret", "s"]) }.to raise_error(StandardError)
     end
 
     it "fails with missing secret" do
-      expect { call(["x", "y:z", "--key", "k"]) }.to raise_error
+      expect { call(["x", "y:z", "--key", "k"]) }.to raise_error(StandardError)
     end
 
     it "fails with missing key and secret" do
-      expect { call(["x", "y:z"]) }.to raise_error
+      expect { call(["x", "y:z"]) }.to raise_error(StandardError)
     end
 
     it "takes key and secret from the environment" do
       ENV["AWS_ACCESS_KEY_ID"] = "k"
       ENV["AWS_SECRET_ACCESS_KEY"] = "s"
-      call(["x", "y:z"]).should == ["x", "y:z", defaults.merge(key: "k", secret: "s")]
+
+      expect(call(["x", "y:z"])).to eq(["x", "y:z", defaults.merge(key: "k", secret: "s")])
     end
 
     it "take verbose mode" do
-      call(["x:z", "y", "-V"]).should == ["x:z", "y", defaults.merge(:verbose => true)]
-      call(["x:z", "y", "--verbose"]).should == ["x:z", "y", defaults.merge(:verbose => true)]
+      expect(call(["x:z", "y", "-V"])).to eq(["x:z", "y", defaults.merge(verbose: true)])
+      expect(call(["x:z", "y", "--verbose"])).to eq(["x:z", "y", defaults.merge(verbose: true)])
     end
 
     it "parses --ssl-none" do
-      call(["x:z", "y", "--ssl-none"]).should == ["x:z", "y", defaults.merge(:ssl_none => true)]
+      expect(call(["x:z", "y", "--ssl-none"])).to eq(["x:z", "y", defaults.merge(ssl_none: true)])
     end
 
     it "parses --zip" do
-      call(["x:z", "y", "--zip"]).should == ["x:z", "y", defaults.merge(:zip => true)]
+      expect(call(["x:z", "y", "--zip"])).to eq(["x:z", "y", defaults.merge(zip: true)])
     end
 
     it "parses --no-local-changes" do
-      call(["x:z", "y", "--no-local-changes"]).should == ["x:z", "y", defaults.merge(:no_local_changes => true)]
+      expect(call(["x:z", "y", "--no-local-changes"])).to eq(["x:z", "y", defaults.merge(no_local_changes: true)])
     end
   end
 
   describe ".download_content" do
     before do
-      $stderr.stub(:puts)
+      allow($stderr).to receive(:puts)
       upload_simple_structure
     end
     after { cleanup_s3 }
 
     it "downloads" do
-      syncer.send(:download_content, "bar/xxx").should == "yyy\n"
+      expect(syncer.send(:download_content, "bar/xxx")).to eq("yyy\n")
     end
 
     it "retries once on ssl error" do
-      syncer.should_receive(:open).and_raise OpenSSL::SSL::SSLError.new
-      syncer.should_receive(:open).and_return stub(:read => "fff")
-      syncer.send(:download_content, "bar/xxx").should == "fff"
+      expect(syncer).to receive(:open).and_raise OpenSSL::SSL::SSLError.new
+      expect(syncer).to receive(:open).and_return double(read: "fff")
+      expect(syncer.send(:download_content, "bar/xxx")).to eq("fff")
     end
 
     it "does not retry multiple times on ssl error" do
-      syncer.should_receive(:open).exactly(2).and_raise OpenSSL::SSL::SSLError.new
+      expect(syncer).to receive(:open).exactly(2).and_raise OpenSSL::SSL::SSLError.new
       expect { syncer.send(:download_content, "bar/xxx") }.to raise_error(OpenSSL::SSL::SSLError)
     end
   end
@@ -401,12 +417,12 @@ describe S3MetaSync do
         Dir.mkdir("bar")
         File.write("foo/bar", "1")
         File.write("bar/bar", "2")
-        tester = Thread.new { loop { File.exist?("foo/bar").should == true } }
+        tester = Thread.new { loop { expect(File.exist?("foo/bar")).to be true } }
         sleep 0.1 # let tester get started
 
-        File.read("foo/bar").should == "1"
+        expect(File.read("foo/bar")).to eq("1")
         S3MetaSync::Syncer.swap_in_directory("foo", "bar")
-        File.read("foo/bar").should == "2"
+        expect(File.read("foo/bar")).to eq("2")
       ensure
         tester.kill
       end
@@ -420,11 +436,11 @@ describe S3MetaSync do
     end
 
     it "shows --version" do
-      sync("--version").should include(S3MetaSync::VERSION)
+      expect(sync("--version")).to include(S3MetaSync::VERSION)
     end
 
     it "shows --help" do
-      sync("--help").should include("Sync folders with s3")
+      expect(sync("--help")).to include("Sync folders with s3")
     end
 
     context "upload" do
@@ -438,13 +454,13 @@ describe S3MetaSync do
       end
 
       it "works" do
-        sync("foo #{config[:bucket]}:bar #{params}").should == "Remote has no .s3-meta-sync, uploading everything\nUploading: 1 Deleting: 0\n"
-        download("bar/xxx").should == "yyy\n"
+        expect(sync("foo #{config[:bucket]}:bar #{params}")).to eq("Remote has no .s3-meta-sync, uploading everything\nUploading: 1 Deleting: 0\n")
+        expect(download("bar/xxx")).to eq("yyy\n")
       end
 
       it "is verbose" do
         result = sync("foo #{config[:bucket]}:bar #{params} --verbose").strip
-        result.should == <<-TXT.gsub(/^ {10}/, "").strip
+        expect(result).to eq <<-TXT.gsub(/^ {10}/, "").strip
           Downloading bar/.s3-meta-sync
           Downloading bar/.s3-meta-sync
           Remote has no .s3-meta-sync, uploading everything
