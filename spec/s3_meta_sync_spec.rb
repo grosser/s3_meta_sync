@@ -52,7 +52,7 @@ describe S3MetaSync do
   def upload(file, content)
     File.write("foo/#{file}", content)
     syncer.send(:upload_file, "foo", file, "bar")
-    syncer.send(:download_content, "bar/#{file}").should == content
+    syncer.send(:download_content, "bar/#{file}").read.should == content
   end
 
   around do |test|
@@ -105,7 +105,7 @@ describe S3MetaSync do
         # uploader should see the log and force a upload
         File.write("foo/xxx", old) # same md5 so normally would not upload
         syncer.sync("foo", "#{config[:bucket]}:bar")
-        syncer.send(:download_content, "bar/xxx").should == old
+        syncer.send(:download_content, "bar/xxx").read.should == old
 
         # log got consumed
         File.exist?("foo/s3-meta-sync-corrupted.log").should == false
@@ -131,7 +131,7 @@ describe S3MetaSync do
         it "uploads files zipped" do
           file = download("bar/xxx")
           file.should include "tH{r"
-          S3MetaSync::Zip.unzip(file).should == "yyy\n"
+          S3MetaSync::Zip.unzip(StringIO.new(file)).read.should == "yyy\n"
           download("bar/.s3-meta-sync").should == foo_md5.sub(/\n\z/, "\n:zip: true\n")
         end
       end
@@ -169,7 +169,11 @@ describe S3MetaSync do
 
       it "retries when trying to download an empty folder" do
         expect {
-          no_cred_syncer.should_receive(:download_content).with(anything).exactly(2).and_raise(OpenURI::HTTPError.new(1111, "Unable to download https://s3-us-west-2.amazonaws.com/s3-meta-sync/bar/.s3-meta-sync -- 404 Not Found"))
+          no_cred_syncer.should_receive(:download_content).
+            with(anything).exactly(2).
+            and_raise(OpenURI::HTTPError.new(
+              123, "Unable to download https://s3-us-west-2.amazonaws.com/s3-meta-sync/bar/.s3-meta-sync -- 404 Not Found"
+            ))
           no_cred_syncer.sync("#{config[:bucket]}:baz", "foo")
         }.to raise_error(S3MetaSync::RemoteWithoutMeta)
       end
@@ -378,13 +382,13 @@ describe S3MetaSync do
     after { cleanup_s3 }
 
     it "downloads" do
-      syncer.send(:download_content, "bar/xxx").should == "yyy\n"
+      syncer.send(:download_content, "bar/xxx").read.should == "yyy\n"
     end
 
     it "retries once on ssl error" do
       syncer.should_receive(:open).and_raise OpenSSL::SSL::SSLError.new
       syncer.should_receive(:open).and_return stub(:read => "fff")
-      syncer.send(:download_content, "bar/xxx").should == "fff"
+      syncer.send(:download_content, "bar/xxx").read.should == "fff"
     end
 
     it "does not retry multiple times on ssl error" do

@@ -12,8 +12,8 @@ module S3MetaSync
         io.string
       end
 
-      def unzip(string)
-        Zlib::GzipReader.new(StringIO.new(string, "rb")).read
+      def unzip(io)
+        Zlib::GzipReader.new(io)
       end
     end
   end
