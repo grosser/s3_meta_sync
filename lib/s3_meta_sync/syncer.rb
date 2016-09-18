@@ -201,7 +201,7 @@ module S3MetaSync
     end
 
     def download_meta(destination)
-      content = download_content("#{destination}/#{META_FILE}")
+      content = download_content("#{destination}/#{META_FILE}") { |io| io.read }
       parse_yaml_content(content)
     rescue OpenURI::HTTPError
       retries ||= 1
@@ -220,18 +220,21 @@ module S3MetaSync
     end
 
     def download_file(source, path, destination, zip)
-      content = download_content("#{source}/#{path}")
-      content = Zip.unzip(content) if zip
-      file = "#{destination}/#{path}"
-      FileUtils.mkdir_p(File.dirname(file))
-      File.write(file, content, :encoding => content.encoding)
+      download = download_content("#{source}/#{path}") # warning: using block form consumes more ram
+      download = Zip.unzip(download) if zip
+      path = "#{destination}/#{path}"
+      FileUtils.mkdir_p(File.dirname(path))
+
+      # consumes less ram then File.write(path, content), possibly also faster
+      File.open(path, 'wb') { |f| IO.copy_stream(download, f) }
+      download.close
     end
 
     def download_content(path)
       log "Downloading #{path}"
       url = "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
       options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
-      open(url, options).read
+      open(url, options)
     rescue OpenURI::HTTPError
       $!.message << " -- while trying to download #{url}"
       raise
