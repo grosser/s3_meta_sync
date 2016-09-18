@@ -52,7 +52,7 @@ describe S3MetaSync do
   def upload(file, content)
     File.write("foo/#{file}", content)
     syncer.send(:upload_file, "foo", file, "bar")
-    expect(syncer.send(:download_content, "bar/#{file}")).read.to eq(content)
+    expect(syncer.send(:download_content, "bar/#{file}").read).to eq(content)
   end
 
   around do |test|
@@ -107,7 +107,7 @@ describe S3MetaSync do
         # uploader should see the log and force a upload
         File.write("foo/xxx", old) # same md5 so normally would not upload
         syncer.sync("foo", "#{config[:bucket]}:bar")
-        expect(syncer.send(:download_content, "bar/xxx")).read.to eq(old)
+        expect(syncer.send(:download_content, "bar/xxx").read).to eq(old)
 
         # log got consumed
         expect(File.exist?("foo/s3-meta-sync-corrupted.log")).to be false
@@ -133,7 +133,7 @@ describe S3MetaSync do
         it "uploads files zipped" do
           file = download("bar/xxx")
           expect(file).to include "tH{r"
-          expect(S3MetaSync::Zip.unzip(StringIO.new(file))).read.to eq("yyy\n")
+          expect(S3MetaSync::Zip.unzip(StringIO.new(file)).read).to eq("yyy\n")
           expect(download("bar/.s3-meta-sync")).to eq(foo_md5.sub(/\n\z/, "\n:zip: true\n"))
         end
       end
@@ -396,13 +396,13 @@ describe S3MetaSync do
     after { cleanup_s3 }
 
     it "downloads" do
-      expect(syncer.send(:download_content, "bar/xxx")).read.to eq("yyy\n")
+      expect(syncer.send(:download_content, "bar/xxx").read).to eq("yyy\n")
     end
 
     it "retries once on ssl error" do
       expect(syncer).to receive(:open).and_raise OpenSSL::SSL::SSLError.new
       expect(syncer).to receive(:open).and_return double(read: "fff")
-      expect(syncer.send(:download_content, "bar/xxx")).read.to eq("fff")
+      expect(syncer.send(:download_content, "bar/xxx").read).to eq("fff")
     end
 
     it "does not retry multiple times on ssl error" do
