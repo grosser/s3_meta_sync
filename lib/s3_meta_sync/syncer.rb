@@ -35,7 +35,7 @@ module S3MetaSync
       remote_meta = begin
         download_meta(destination)
       rescue RemoteWithoutMeta
-        log "Remote has no .s3-meta-sync, uploading everything", true
+        log "Remote has no #{META_FILE}, uploading everything", true
         {files: {}}
       end
       local_files = generate_meta(source)[:files]
