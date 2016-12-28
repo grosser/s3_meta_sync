@@ -1,5 +1,7 @@
 require "spec_helper"
 
+SingleCov.covered! uncovered: 3 # .run is covered via CLI tests, but does not report coverage
+
 describe S3MetaSync do
   def sh(command, options={})
     result = `#{command} #{"2>&1" unless options[:keep_output]}`

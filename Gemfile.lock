@@ -31,6 +31,7 @@ GEM
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.5.0)
     rspec-support (3.5.0)
+    single_cov (0.5.9)
 
 PLATFORMS
   ruby
@@ -41,6 +42,7 @@ DEPENDENCIES
   rake
   rspec (~> 3)
   s3_meta_sync!
+  single_cov
 
 BUNDLED WITH
-   1.12.5
+   1.13.6
