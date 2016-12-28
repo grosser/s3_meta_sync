@@ -55,6 +55,15 @@ Download using [multi-timeout](https://github.com/grosser/multi_timeout):
 multi-timeout -INT 59m -KILL 60m /usr/bin/flock -n lock sh -c '(s3-meta-sync company:translations /data/translations > /tmp/downloader.log 2>&1 && date >> /tmp/downloader.log && cat /tmp/downloader.log >> /var/log/downloader.log) || cat /tmp/downloader.log'
 ```
 
+Development
+===========
+
+ - `cp spec/credentials.yml{.example,}` 
+ - fill it out
+ - `bundle exec rake` 
+
+Atm no travis tests since they would need aws credentials, which I cannot store on travis securely.
+
 Author
 ======
 [Michael Grosser](http://grosser.it)<br/>
