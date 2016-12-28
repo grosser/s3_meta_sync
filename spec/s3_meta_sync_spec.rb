@@ -1,6 +1,7 @@
 require "spec_helper"
 
 SingleCov.covered! uncovered: 3 # .run is covered via CLI tests, but does not report coverage
+# TODO: cover each file in lib
 
 describe S3MetaSync do
   def sh(command, options={})
@@ -302,6 +303,30 @@ describe S3MetaSync do
 
         it_downloads_into_an_empty_folder
       end
+    end
+  end
+
+  it "can download from a http server" do
+    allow($stderr).to receive(:puts)
+    port = 9000
+    replies = {
+      "/foo/.s3-meta-sync" => [200, {}, [{
+        files: {
+          "bar/baz.txt" => "eb61eead90e3b899c6bcbe27ac581660",
+          "baz/bar.txt" => "5289492cf082446ca4a6eec9f72f1ec3"
+        }}.to_yaml
+      ]],
+      "/foo/bar/baz.txt" => [200, {}, ["HELLO"]],
+      "/foo/baz/bar.txt" => [200, {}, ["WORLD"]],
+    }
+    StubServer.open(port, replies) do |server|
+      server.wait
+
+      syncer = S3MetaSync::Syncer.new({})
+      syncer.sync('http://localhost:9000/foo', 'local')
+      expect(File.exist?('local/.s3-meta-sync')).to eq true
+      expect(File.read('local/bar/baz.txt')).to eq 'HELLO'
+      expect(File.read('local/baz/bar.txt')).to eq 'WORLD'
     end
   end
 

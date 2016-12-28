@@ -17,13 +17,18 @@ module S3MetaSync
     end
 
     def sync(source, destination)
-      raise if source.end_with?("/") or destination.end_with?("/")
+      raise ArgumentError if source.end_with?("/") or destination.end_with?("/")
 
       if destination.include?(":")
         @bucket, destination = destination.split(":")
         upload(source, destination)
       else
-        @bucket, source = source.split(":")
+        if url?(source)
+          @bucket = nil
+          source = source
+        else
+          @bucket, source = source.split(":")
+        end
         download(source, destination)
       end
     end
@@ -232,7 +237,12 @@ module S3MetaSync
 
     def download_content(path)
       log "Downloading #{path}"
-      url = "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
+      url =
+        if url?(path)
+          path
+        else
+          "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
+        end
       options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
       open(url, options)
     rescue OpenURI::HTTPError
@@ -278,6 +288,10 @@ module S3MetaSync
           end
         end
       end.each(&:join)
+    end
+
+    def url?(source)
+      source.include?("://")
     end
 
     def log(text, important=false)

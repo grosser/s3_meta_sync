@@ -1,4 +1,4 @@
-Sync folders with s3 using a metadata file with md5 sums.
+Sync folders with s3 or http server using a metadata file with md5 sums.
 
 Install
 =======
@@ -11,6 +11,9 @@ Usage
 ```Bash
 # upload local files and remove everything that is not local
 s3-meta-sync <local> <bucket:folder> --key <aws-access-key> --secret <aws-secret-key>
+
+# download from a http server (for internal mirroring)
+s3-meta-sync http://my-ftp.com/some-folder <local> # no credentials required
 
 # download files and remove everything that is not remote
 s3-meta-sync <bucket:folder> <local> --region us-west-2 # no credentials required

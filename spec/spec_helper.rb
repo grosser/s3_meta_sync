@@ -5,3 +5,4 @@ SingleCov.setup :rspec
 
 require "s3_meta_sync"
 require "tmpdir"
+require "stub_server"
