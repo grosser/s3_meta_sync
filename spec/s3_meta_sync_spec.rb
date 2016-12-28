@@ -1,7 +1,9 @@
 require "spec_helper"
 
 SingleCov.covered! uncovered: 3 # .run is covered via CLI tests, but does not report coverage
-# TODO: cover each file in lib
+(Dir['lib/**/*.rb'] - ['lib/s3_meta_sync.rb', 'lib/s3_meta_sync/version.rb']).each do |file|
+  SingleCov.covered! file: file
+end
 
 describe S3MetaSync do
   def sh(command, options={})
