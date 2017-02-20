@@ -246,8 +246,15 @@ module S3MetaSync
       options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
       open(url, options)
     rescue OpenURI::HTTPError
-      $!.message << " -- while trying to download #{url}"
-      raise
+      retries ||= 0
+      retries += 1
+      if retries >= 3
+        $!.message << " -- while trying to download #{url}"
+        raise
+      else
+        log "HTTP Error downloading #{path}, retrying"
+        retry
+      end
     rescue OpenSSL::SSL::SSLError
       retries ||= 0
       retries += 1
