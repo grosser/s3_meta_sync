@@ -44,7 +44,7 @@ module S3MetaSync
         opts.on("--no-local-changes", "Do not md5 all the local files, they did not change") { options[:no_local_changes] = true }
         opts.on("-V", "--verbose", "Verbose mode"){ options[:verbose] = true }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
-        opts.on("-v", "--version", "Show Version"){ puts VERSION; exit}
+        opts.on("-v", "--version", "Show Version") { puts VERSION; exit}
       end.parse!(argv)
 
       raise "need source and destination" unless argv.size == 2

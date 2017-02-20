@@ -438,6 +438,18 @@ describe S3MetaSync do
       expect(syncer).to receive(:open).exactly(2).and_raise OpenSSL::SSL::SSLError.new
       expect { syncer.send(:download_content, "bar/xxx") }.to raise_error(OpenSSL::SSL::SSLError)
     end
+
+    it "retries on a HTTP error" do
+      expect(syncer).to receive(:open).and_raise OpenURI::HTTPError.new
+      expect(syncer).to receive(:open).and_raise OpenURI::HTTPError.new
+      expect(syncer).to receive(:open).and_return double(read: "fff")
+      expect(syncer.send(:download_content, "bar/xxx").read).to eq("fff")
+    end
+
+    it "does not retry more than 3 times on a HTTP error" do
+      expect(syncer).to receive(:open).exactly(3).and_raise OpenURI::HTTPError.new
+      expect(syncer.send(:download_content, "bar/xxx").read).to raise_error(OpenURI::HTTPError)
+    end
   end
 
   describe ".swap_in_directory" do
