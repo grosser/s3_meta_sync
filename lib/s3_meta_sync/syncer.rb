@@ -68,7 +68,7 @@ module S3MetaSync
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
       if download.any? || delete.any?
-        mktmpdir do |staging_area|
+        make_temporary_folder do |staging_area|
           FileUtils.mkdir_p(destination)
           copy_content(destination, staging_area)
           download_files(source, staging_area, download, remote_meta[:zip])
@@ -83,7 +83,7 @@ module S3MetaSync
       end
     end
 
-    def mktmpdir
+    def make_temporary_folder
       dir = Dir.mktmpdir("s3ms_")
       log "Tmp folder: #{dir}"
       yield dir
