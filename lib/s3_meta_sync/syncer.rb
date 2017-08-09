@@ -68,7 +68,7 @@ module S3MetaSync
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
       if download.any? || delete.any?
-        Dir.mktmpdir do |staging_area|
+        mktmpdir do |staging_area|
           FileUtils.mkdir_p(destination)
           copy_content(destination, staging_area)
           download_files(source, staging_area, download, remote_meta[:zip])
@@ -80,6 +80,18 @@ module S3MetaSync
           self.class.swap_in_directory(destination, staging_area)
           FileUtils.mkdir(staging_area) # mktmpdir tries to remove this directory
         end
+      end
+    end
+
+    def mktmpdir
+      dir = Dir.mktmpdir("s3ms_")
+      log "Tmp folder: #{dir}"
+      yield dir
+    ensure
+      if dir
+        log "FileUtils.remove_entry #{dir}: #{FileUtils.remove_entry(dir, true)}"
+        # Sometimes remove_entry fails, trying really hard:
+        log "rm -rf #{dir}: #{`rm -rf #{dir}`.inspect}"
       end
     end
 
@@ -210,12 +222,12 @@ module S3MetaSync
       parse_yaml_content(content)
     rescue OpenURI::HTTPError
       retries ||= 1
-      if retries == 2
-        raise RemoteWithoutMeta
-      else
+      if retries <= 1
         retries += 1
         sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
         retry
+      else
+        raise RemoteWithoutMeta
       end
     end
 
@@ -244,22 +256,27 @@ module S3MetaSync
           "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
         end
       options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
-      open(url, options)
-    rescue OpenURI::HTTPError
-      retries ||= 0
-      retries += 1
-      if retries >= 3
+      with_retries(path: path, url: url) { open(url, options) }
+    end
+
+    def with_retries(path:, url:)
+      yield
+    rescue OpenURI::HTTPError, Errno::ECONNRESET => e
+      max_retries = @config[:max_retries] || 2
+      retries ||= Hash.new(0)
+      retries[e.class] += 1
+      if retries[e.class] <= max_retries
+        log "#{e.class} error downloading #{path}, retrying (at #{retries[e.class]})"
+        retry
+      else
         $!.message << " -- while trying to download #{url}"
         raise
-      else
-        log "HTTP Error downloading #{path}, retrying"
-        retry
       end
     rescue OpenSSL::SSL::SSLError
-      retries ||= 0
-      retries += 1
-      if retries == 1
-        log "SSL error downloading #{path}, retrying"
+      ssl_error_retries ||= 0
+      ssl_error_retries += 1
+      if ssl_error_retries == 1
+        log "SSL error downloading #{path}, retrying (at #{ssl_error_retries})"
         retry
       else
         raise

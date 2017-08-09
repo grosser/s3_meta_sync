@@ -42,6 +42,7 @@ module S3MetaSync
         opts.on("--ssl-none", "Do not verify ssl certs") { options[:ssl_none] = true }
         opts.on("-z", "--zip", "Zip when uploading to save bandwidth") { options[:zip] = true }
         opts.on("--no-local-changes", "Do not md5 all the local files, they did not change") { options[:no_local_changes] = true }
+        opts.on("--retries MAX", Integer, "MAX number of times retrying failed http requests default: 2") { |c| options[:max_retries] = c }
         opts.on("-V", "--verbose", "Verbose mode"){ options[:verbose] = true }
         opts.on("-h", "--help", "Show this.") { puts opts; exit }
         opts.on("-v", "--version", "Show Version") { puts VERSION; exit}

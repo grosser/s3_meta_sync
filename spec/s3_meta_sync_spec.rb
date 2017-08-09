@@ -21,7 +21,13 @@ describe S3MetaSync do
     )
   end
   let(:bucket) { config[:bucket] }
-  let(:foo_md5) { "---\n:files:\n  xxx: 0976fb571ada412514fe67273780c510\n" }
+  let(:foo_md5) do |variable|
+    if RUBY_VERSION < '2.4.0'
+      "---\n:files:\n  xxx: 0976fb571ada412514fe67273780c510\n"
+    else
+      "---\n:files:\n  xxx: '0976fb571ada412514fe67273780c510'\n"
+    end
+  end
   let(:syncer) { S3MetaSync::Syncer.new(config) }
 
   def cleanup_s3
@@ -68,6 +74,20 @@ describe S3MetaSync do
 
   it "has a VERSION" do
     expect(S3MetaSync::VERSION).to match(/^[\.\da-z]+$/)
+  end
+
+  describe "#parse_yaml_content" do
+    let(:meta_yaml_content) { { files: { "xxx" => "0976fb571ada412514fe67273780c510" } } }
+    let(:foo_md5_rails_2_2) { "---\n:files:\n  xxx: 0976fb571ada412514fe67273780c510\n" }
+    let(:foo_md5_rails_2_4) { "---\n:files:\n  xxx: '0976fb571ada412514fe67273780c510'\n" }
+
+    it 'parses yaml content on ruby < 2.4 format' do
+      expect(syncer.send(:parse_yaml_content, foo_md5_rails_2_2)).to eq(meta_yaml_content)
+    end
+
+    it 'parses yaml content on ruby 2.4 format' do
+      expect(syncer.send(:parse_yaml_content, foo_md5_rails_2_4)).to eq(meta_yaml_content)
+    end
   end
 
   describe "#sync" do
@@ -415,6 +435,10 @@ describe S3MetaSync do
     it "parses --no-local-changes" do
       expect(call(["x:z", "y", "--no-local-changes"])).to eq(["x:z", "y", defaults.merge(no_local_changes: true)])
     end
+
+    it "parses --retries" do
+      expect(call(["x:z", "y", "--retries=5"])).to eq(["x:z", "y", defaults.merge(max_retries: 5)])
+    end
   end
 
   describe ".download_content" do
@@ -440,15 +464,34 @@ describe S3MetaSync do
     end
 
     it "retries on a HTTP error" do
-      expect(syncer).to receive(:open).and_raise OpenURI::HTTPError.new
-      expect(syncer).to receive(:open).and_raise OpenURI::HTTPError.new
+      expect(syncer).to receive(:open).and_raise OpenURI::HTTPError.new('http error', nil)
+      expect(syncer).to receive(:open).and_raise OpenURI::HTTPError.new('http error', nil)
       expect(syncer).to receive(:open).and_return double(read: "fff")
       expect(syncer.send(:download_content, "bar/xxx").read).to eq("fff")
     end
 
     it "does not retry more than 3 times on a HTTP error" do
-      expect(syncer).to receive(:open).exactly(3).and_raise OpenURI::HTTPError.new
-      expect(syncer.send(:download_content, "bar/xxx").read).to raise_error(OpenURI::HTTPError)
+      expect(syncer).to receive(:open).exactly(3).and_raise OpenURI::HTTPError.new('http error', nil)
+      expect { syncer.send(:download_content, "bar/xxx").read }.to raise_error(OpenURI::HTTPError)
+    end
+
+    it "does not retry more than 3 times on a Errno::ECONNRESET" do
+      expect(syncer).to receive(:open).exactly(3).and_raise Errno::ECONNRESET
+      expect { syncer.send(:download_content, "bar/xxx").read }.to raise_error(Errno::ECONNRESET)
+    end
+
+    describe "with retries option" do
+      before { config[:max_retries] = 3 }
+
+      it "retries more than 3 times on a HTTP error" do
+        expect(syncer).to receive(:open).exactly(4).and_raise OpenURI::HTTPError.new('http error', nil)
+        expect { syncer.send(:download_content, "bar/xxx").read }.to raise_error(OpenURI::HTTPError)
+      end
+
+      it "retries more than 3 times on a Errno::ECONNRESET" do
+        expect(syncer).to receive(:open).exactly(4).and_raise Errno::ECONNRESET
+        expect { syncer.send(:download_content, "bar/xxx").read }.to raise_error(Errno::ECONNRESET)
+      end
     end
   end
 
@@ -505,7 +548,11 @@ describe S3MetaSync do
         result = sync("foo #{config[:bucket]}:bar #{params} --verbose").strip
         expect(result).to eq <<-TXT.gsub(/^ {10}/, "").strip
           Downloading bar/.s3-meta-sync
+          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying (at 1)
+          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying (at 2)
           Downloading bar/.s3-meta-sync
+          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying (at 1)
+          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying (at 2)
           Remote has no .s3-meta-sync, uploading everything
           Uploading: 1 Deleting: 0
           Uploading xxx
