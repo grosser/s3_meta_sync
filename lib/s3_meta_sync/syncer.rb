@@ -263,10 +263,10 @@ module S3MetaSync
       yield
     rescue OpenURI::HTTPError, Errno::ECONNRESET => e
       max_retries = @config[:max_retries] || 2
-      retries ||= Hash.new(0)
-      retries[e.class] += 1
-      if retries[e.class] <= max_retries
-        log "#{e.class} error downloading #{path}, retrying (at #{retries[e.class]})"
+      http_error_retries ||= 0
+      http_error_retries += 1
+      if http_error_retries <= max_retries
+        log "#{e.class} error downloading #{path}, retrying (at #{http_error_retries})"
         retry
       else
         $!.message << " -- while trying to download #{url}"
