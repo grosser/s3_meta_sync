@@ -11,6 +11,7 @@ require "s3_meta_sync/zip"
 module S3MetaSync
   class Syncer
     DEFAULT_REGION = 'us-east-1'
+    TEMP_FOLDER_PREFIX = "s3ms_"
 
     def initialize(config)
       @config = config
@@ -59,6 +60,8 @@ module S3MetaSync
     end
 
     def download(source, destination)
+      clear_old_temp_folders
+
       remote_meta = download_meta(source)
       local_files = ((@config[:no_local_changes] && read_meta(destination)) || meta_data(destination))[:files]
 
@@ -68,7 +71,8 @@ module S3MetaSync
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
       if download.any? || delete.any?
-        make_temporary_folder do |staging_area|
+        Dir.mktmpdir(TEMP_FOLDER_PREFIX) do |staging_area|
+          log "Temp folder: #{staging_area}"
           FileUtils.mkdir_p(destination)
           copy_content(destination, staging_area)
           download_files(source, staging_area, download, remote_meta[:zip])
@@ -83,16 +87,11 @@ module S3MetaSync
       end
     end
 
-    def make_temporary_folder
-      dir = Dir.mktmpdir("s3ms_")
-      log "Tmp folder: #{dir}"
-      yield dir
-    ensure
-      if dir
-        log "FileUtils.remove_entry #{dir}: #{FileUtils.remove_entry(dir, true)}"
-        # Sometimes remove_entry fails, trying really hard:
-        log "rm -rf #{dir}: #{`rm -rf #{dir}`.inspect}"
-      end
+    # Sometimes SIGTERM causes Dir.mktmpdir to not properly clear the temp folder
+    def clear_old_temp_folders
+      path = File.join(Dir.tmpdir, TEMP_FOLDER_PREFIX + '*')
+      total = Dir.glob(path).map { |dir| FileUtils.rm_rf(dir) }.count
+      log "Removed #{total} old temp folder(s)" if total > 0
     end
 
     def copy_content(destination, dir)

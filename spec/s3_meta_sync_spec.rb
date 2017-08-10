@@ -221,6 +221,17 @@ describe S3MetaSync do
         expect(after).to eq(before)
       end
 
+      it "remove tempdirs left behind by SIGTERM exceptions" do
+        dir = File.dirname(Dir.mktmpdir)
+        Dir.mktmpdir(S3MetaSync::Syncer::TEMP_FOLDER_PREFIX)
+        before = Dir["#{dir}/*"].size
+
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        after = Dir["#{dir}/*"].size
+
+        expect(after).to eq(before - 1)
+      end
+
       it "downloads nothing when everything is up to date" do
         expect(no_cred_syncer).not_to receive(:download_file)
         expect(no_cred_syncer).not_to receive(:delete_local_files)
