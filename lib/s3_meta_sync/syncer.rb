@@ -221,9 +221,9 @@ module S3MetaSync
       content = download_content("#{destination}/#{META_FILE}") { |io| io.read }
       parse_yaml_content(content)
     rescue OpenURI::HTTPError
-      retries ||= 1
+      retries ||= 0
+      retries += 1
       if retries <= 1
-        retries += 1
         sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
         retry
       else
@@ -266,7 +266,7 @@ module S3MetaSync
       http_error_retries ||= 0
       http_error_retries += 1
       if http_error_retries <= max_retries
-        log "#{e.class} error downloading #{path}, retrying (at #{http_error_retries})"
+        log "#{e.class} error downloading #{path}, retrying #{http_error_retries}/#{max_retries}"
         retry
       else
         $!.message << " -- while trying to download #{url}"
@@ -276,7 +276,7 @@ module S3MetaSync
       ssl_error_retries ||= 0
       ssl_error_retries += 1
       if ssl_error_retries == 1
-        log "SSL error downloading #{path}, retrying (at #{ssl_error_retries})"
+        log "SSL error downloading #{path}, retrying #{ssl_error_retries}/#{max_retries}"
         retry
       else
         raise

@@ -548,11 +548,11 @@ describe S3MetaSync do
         result = sync("foo #{config[:bucket]}:bar #{params} --verbose").strip
         expect(result).to eq <<-TXT.gsub(/^ {10}/, "").strip
           Downloading bar/.s3-meta-sync
-          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying (at 1)
-          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying (at 2)
+          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying 1/2
+          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying 2/2
           Downloading bar/.s3-meta-sync
-          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying (at 1)
-          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying (at 2)
+          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying 1/2
+          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying 2/2
           Remote has no .s3-meta-sync, uploading everything
           Uploading: 1 Deleting: 0
           Uploading xxx
