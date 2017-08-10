@@ -88,10 +88,20 @@ module S3MetaSync
     end
 
     # Sometimes SIGTERM causes Dir.mktmpdir to not properly clear the temp folder
+    # Remove day old folders
     def clear_old_temp_folders
       path = File.join(Dir.tmpdir, TEMP_FOLDER_PREFIX + '*')
-      total = Dir.glob(path).map { |dir| FileUtils.rm_rf(dir) }.count
+
+      total = Dir.glob(path).map do |dir|
+        day = 60 * 60 * 24
+        FileUtils.rm_rf(dir) if older_than(dir, day)
+      end.compact.count
+
       log "Removed #{total} old temp folder(s)" if total > 0
+    end
+
+    def older_than(dir, seconds)
+      Time.now.utc - File.ctime(dir).utc > seconds
     end
 
     def copy_content(destination, dir)
@@ -275,7 +285,7 @@ module S3MetaSync
       ssl_error_retries ||= 0
       ssl_error_retries += 1
       if ssl_error_retries == 1
-        log "SSL error downloading #{path}, retrying #{ssl_error_retries}/#{max_retries}"
+        log "SSL error downloading #{path}, retrying"
         retry
       else
         raise

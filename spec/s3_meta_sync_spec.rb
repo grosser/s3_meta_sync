@@ -221,13 +221,28 @@ describe S3MetaSync do
         expect(after).to eq(before)
       end
 
-      it "remove tempdirs left behind by SIGTERM exceptions" do
-        dir = File.dirname(Dir.mktmpdir)
+      it "does not remove recent tempdirs left behind by SIGTERM exceptions" do
         Dir.mktmpdir(S3MetaSync::Syncer::TEMP_FOLDER_PREFIX)
-        before = Dir["#{dir}/*"].size
+        path = File.join(Dir.tmpdir, S3MetaSync::Syncer::TEMP_FOLDER_PREFIX + '*')
+        before = Dir[path].size
 
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
-        after = Dir["#{dir}/*"].size
+        after = Dir[path].size
+
+        expect(after).to eq(before)
+      end
+
+      it "remove older (than a day) tempdirs left behind by SIGTERM exceptions" do
+        Dir.mktmpdir(S3MetaSync::Syncer::TEMP_FOLDER_PREFIX)
+        dir = Dir.mktmpdir(S3MetaSync::Syncer::TEMP_FOLDER_PREFIX)
+        path = File.join(Dir.tmpdir, S3MetaSync::Syncer::TEMP_FOLDER_PREFIX + '*')
+        before = Dir[path].size
+
+        allow(no_cred_syncer).to receive(:older_than).and_return(false)
+        allow(no_cred_syncer).to receive(:older_than).with(dir, 60 * 60 * 24).and_return(true)
+
+        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        after = Dir[path].size
 
         expect(after).to eq(before - 1)
       end
