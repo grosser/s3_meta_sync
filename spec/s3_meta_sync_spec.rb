@@ -222,8 +222,8 @@ describe S3MetaSync do
       end
 
       it "does not remove recent tempdirs left behind by SIGTERM exceptions" do
-        Dir.mktmpdir(S3MetaSync::Syncer::TEMP_FOLDER_PREFIX)
-        path = File.join(Dir.tmpdir, S3MetaSync::Syncer::TEMP_FOLDER_PREFIX + '*')
+        Dir.mktmpdir(S3MetaSync::Syncer::STAGING_AREA_PREFIX)
+        path = File.join(Dir.tmpdir, S3MetaSync::Syncer::STAGING_AREA_PREFIX + '*')
         before = Dir[path].size
 
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
@@ -233,13 +233,13 @@ describe S3MetaSync do
       end
 
       it "remove older (than a day) tempdirs left behind by SIGTERM exceptions" do
-        Dir.mktmpdir(S3MetaSync::Syncer::TEMP_FOLDER_PREFIX)
-        dir = Dir.mktmpdir(S3MetaSync::Syncer::TEMP_FOLDER_PREFIX)
-        path = File.join(Dir.tmpdir, S3MetaSync::Syncer::TEMP_FOLDER_PREFIX + '*')
+        Dir.mktmpdir(S3MetaSync::Syncer::STAGING_AREA_PREFIX)
+        dir = Dir.mktmpdir(S3MetaSync::Syncer::STAGING_AREA_PREFIX)
+        path = File.join(Dir.tmpdir, S3MetaSync::Syncer::STAGING_AREA_PREFIX + '*')
         before = Dir[path].size
 
         allow(no_cred_syncer).to receive(:older_than).and_return(false)
-        allow(no_cred_syncer).to receive(:older_than).with(dir, 60 * 60 * 24).and_return(true)
+        allow(no_cred_syncer).to receive(:older_than).with(dir, 24 * 60 * 60).and_return(true)
 
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         after = Dir[path].size

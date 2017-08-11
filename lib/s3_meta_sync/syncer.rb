@@ -11,7 +11,7 @@ require "s3_meta_sync/zip"
 module S3MetaSync
   class Syncer
     DEFAULT_REGION = 'us-east-1'
-    TEMP_FOLDER_PREFIX = "s3ms_"
+    STAGING_AREA_PREFIX = "s3ms_"
 
     def initialize(config)
       @config = config
@@ -71,7 +71,7 @@ module S3MetaSync
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
       if download.any? || delete.any?
-        Dir.mktmpdir(TEMP_FOLDER_PREFIX) do |staging_area|
+        Dir.mktmpdir(STAGING_AREA_PREFIX) do |staging_area|
           log "Temp folder: #{staging_area}"
           FileUtils.mkdir_p(destination)
           copy_content(destination, staging_area)
@@ -90,14 +90,12 @@ module S3MetaSync
     # Sometimes SIGTERM causes Dir.mktmpdir to not properly clear the temp folder
     # Remove day old folders
     def clear_old_temp_folders
-      path = File.join(Dir.tmpdir, TEMP_FOLDER_PREFIX + '*')
+      path = File.join(Dir.tmpdir, STAGING_AREA_PREFIX + '*')
 
-      total = Dir.glob(path).map do |dir|
-        day = 60 * 60 * 24
-        FileUtils.rm_rf(dir) if older_than(dir, day)
-      end.compact.count
+      day = 24 * 60 * 60
+      removed = Dir.glob(path).select { |dir| older_than(dir, day) }. map { |dir| FileUtils.rm_rf(dir) }
 
-      log "Removed #{total} old temp folder(s)" if total > 0
+      log "Removed #{removed} old temp folder(s)" if removed.count > 0
     end
 
     def older_than(dir, seconds)
