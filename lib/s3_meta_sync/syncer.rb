@@ -60,7 +60,7 @@ module S3MetaSync
     end
 
     def download(source, destination)
-      clear_old_temp_folders
+      delete_old_temp_folders
 
       remote_meta = download_meta(source)
       local_files = ((@config[:no_local_changes] && read_meta(destination)) || meta_data(destination))[:files]
@@ -72,7 +72,7 @@ module S3MetaSync
 
       if download.any? || delete.any?
         Dir.mktmpdir(STAGING_AREA_PREFIX) do |staging_area|
-          log "Temp folder: #{staging_area}"
+          log "Staging area: #{staging_area}"
           FileUtils.mkdir_p(destination)
           copy_content(destination, staging_area)
           download_files(source, staging_area, download, remote_meta[:zip])
@@ -87,19 +87,17 @@ module S3MetaSync
       end
     end
 
-    # Sometimes SIGTERM causes Dir.mktmpdir to not properly clear the temp folder
-    # Remove day old folders
-    def clear_old_temp_folders
+    # Sometimes SIGTERM causes Dir.mktmpdir to not properly delete the temp folder
+    # Remove 1 day old folders
+    def delete_old_temp_folders
       path = File.join(Dir.tmpdir, STAGING_AREA_PREFIX + '*')
 
       day = 24 * 60 * 60
-      removed = Dir.glob(path).select { |dir| older_than(dir, day) }. map { |dir| FileUtils.rm_rf(dir) }
+      dirs = Dir.glob(path)
+      dirs.select! { |dir| Time.now.utc - File.ctime(dir).utc > day } # only stale ones
+      removed = dirs.each { |dir| FileUtils.rm_rf(dir) }
 
       log "Removed #{removed} old temp folder(s)" if removed.count > 0
-    end
-
-    def older_than(dir, seconds)
-      Time.now.utc - File.ctime(dir).utc > seconds
     end
 
     def copy_content(destination, dir)
@@ -264,17 +262,17 @@ module S3MetaSync
           "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
         end
       options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
-      with_retries(path: path, url: url) { open(url, options) }
+      retry_downloads(url: url) { open(url, options) }
     end
 
-    def with_retries(path:, url:)
+    def retry_downloads(url:)
       yield
     rescue OpenURI::HTTPError, Errno::ECONNRESET => e
       max_retries = @config[:max_retries] || 2
       http_error_retries ||= 0
       http_error_retries += 1
       if http_error_retries <= max_retries
-        log "#{e.class} error downloading #{path}, retrying #{http_error_retries}/#{max_retries}"
+        log "#{e.class} error downloading #{url}, retrying #{http_error_retries}/#{max_retries}"
         retry
       else
         $!.message << " -- while trying to download #{url}"
@@ -284,7 +282,7 @@ module S3MetaSync
       ssl_error_retries ||= 0
       ssl_error_retries += 1
       if ssl_error_retries == 1
-        log "SSL error downloading #{path}, retrying"
+        log "SSL error downloading #{url}, retrying"
         retry
       else
         raise

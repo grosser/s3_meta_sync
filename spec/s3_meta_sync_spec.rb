@@ -238,8 +238,9 @@ describe S3MetaSync do
         path = File.join(Dir.tmpdir, S3MetaSync::Syncer::STAGING_AREA_PREFIX + '*')
         before = Dir[path].size
 
-        allow(no_cred_syncer).to receive(:older_than).and_return(false)
-        allow(no_cred_syncer).to receive(:older_than).with(dir, 24 * 60 * 60).and_return(true)
+        allow(File).to receive(:ctime).and_return(Time.now.utc)
+        ctime = Time.at(Time.now.utc - 25 * 60 * 60)
+        allow(File).to receive(:ctime).with(dir).and_return(ctime)
 
         no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
         after = Dir[path].size
@@ -574,11 +575,11 @@ describe S3MetaSync do
         result = sync("foo #{config[:bucket]}:bar #{params} --verbose").strip
         expect(result).to eq <<-TXT.gsub(/^ {10}/, "").strip
           Downloading bar/.s3-meta-sync
-          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying 1/2
-          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying 2/2
+          OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 1/2
+          OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 2/2
           Downloading bar/.s3-meta-sync
-          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying 1/2
-          OpenURI::HTTPError error downloading bar/.s3-meta-sync, retrying 2/2
+          OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 1/2
+          OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 2/2
           Remote has no .s3-meta-sync, uploading everything
           Uploading: 1 Deleting: 0
           Uploading xxx
