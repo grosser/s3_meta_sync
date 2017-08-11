@@ -11,6 +11,7 @@ require "s3_meta_sync/zip"
 module S3MetaSync
   class Syncer
     DEFAULT_REGION = 'us-east-1'
+    STAGING_AREA_PREFIX = "s3ms_"
 
     def initialize(config)
       @config = config
@@ -59,6 +60,8 @@ module S3MetaSync
     end
 
     def download(source, destination)
+      delete_old_temp_folders
+
       remote_meta = download_meta(source)
       local_files = ((@config[:no_local_changes] && read_meta(destination)) || meta_data(destination))[:files]
 
@@ -68,7 +71,8 @@ module S3MetaSync
       log "Downloading: #{download.size} Deleting: #{delete.size}", true
 
       if download.any? || delete.any?
-        Dir.mktmpdir do |staging_area|
+        Dir.mktmpdir(STAGING_AREA_PREFIX) do |staging_area|
+          log "Staging area: #{staging_area}"
           FileUtils.mkdir_p(destination)
           copy_content(destination, staging_area)
           download_files(source, staging_area, download, remote_meta[:zip])
@@ -83,7 +87,21 @@ module S3MetaSync
       end
     end
 
+    # Sometimes SIGTERM causes Dir.mktmpdir to not properly delete the temp folder
+    # Remove 1 day old folders
+    def delete_old_temp_folders
+      path = File.join(Dir.tmpdir, STAGING_AREA_PREFIX + '*')
+
+      day = 24 * 60 * 60
+      dirs = Dir.glob(path)
+      dirs.select! { |dir| Time.now.utc - File.ctime(dir).utc > day } # only stale ones
+      removed = dirs.each { |dir| FileUtils.rm_rf(dir) }
+
+      log "Removed #{removed} old temp folder(s)" if removed.count > 0
+    end
+
     def copy_content(destination, dir)
+      log "Copying content from #{destination} to #{dir}"
       system "cp -R #{destination}/* #{dir} 2>/dev/null"
     end
 
@@ -209,13 +227,13 @@ module S3MetaSync
       content = download_content("#{destination}/#{META_FILE}") { |io| io.read }
       parse_yaml_content(content)
     rescue OpenURI::HTTPError
-      retries ||= 1
-      if retries == 2
-        raise RemoteWithoutMeta
-      else
-        retries += 1
+      retries ||= 0
+      retries += 1
+      if retries <= 1
         sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
         retry
+      else
+        raise RemoteWithoutMeta
       end
     end
 
@@ -244,22 +262,27 @@ module S3MetaSync
           "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
         end
       options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
-      open(url, options)
-    rescue OpenURI::HTTPError
-      retries ||= 0
-      retries += 1
-      if retries >= 3
+      retry_downloads(url: url) { open(url, options) }
+    end
+
+    def retry_downloads(url:)
+      yield
+    rescue OpenURI::HTTPError, Errno::ECONNRESET => e
+      max_retries = @config[:max_retries] || 2
+      http_error_retries ||= 0
+      http_error_retries += 1
+      if http_error_retries <= max_retries
+        log "#{e.class} error downloading #{url}, retrying #{http_error_retries}/#{max_retries}"
+        retry
+      else
         $!.message << " -- while trying to download #{url}"
         raise
-      else
-        log "HTTP Error downloading #{path}, retrying"
-        retry
       end
     rescue OpenSSL::SSL::SSLError
-      retries ||= 0
-      retries += 1
-      if retries == 1
-        log "SSL error downloading #{path}, retrying"
+      ssl_error_retries ||= 0
+      ssl_error_retries += 1
+      if ssl_error_retries == 1
+        log "SSL error downloading #{url}, retrying"
         retry
       else
         raise
