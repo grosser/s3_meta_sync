@@ -103,6 +103,7 @@ module S3MetaSync
     end
 
     def copy_content(destination, dir)
+      log "Copying content from #{destination} to #{dir}"
       system "cp -R #{destination}/* #{dir} 2>/dev/null"
     end
 
