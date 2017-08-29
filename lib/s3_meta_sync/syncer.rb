@@ -274,7 +274,7 @@ module S3MetaSync
 
     def retry_downloads(url:)
       yield
-    rescue OpenURI::HTTPError, Errno::ECONNRESET, Net::OpenTimeout, Net::ReadTimeout => e
+    rescue OpenURI::HTTPError, Errno::ECONNRESET, Errno::ETIMEDOUT, Net::OpenTimeout, Net::ReadTimeout => e
       max_retries = @config[:max_retries] || 2
       http_error_retries ||= 0
       http_error_retries += 1
