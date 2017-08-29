@@ -81,8 +81,10 @@ module S3MetaSync
           store_meta(staging_area, remote_meta)
 
           verify_integrity!(staging_area, destination, download, remote_meta[:files])
+          log "Swapping in directories #{destination} and #{staging_area}"
           self.class.swap_in_directory(destination, staging_area)
           FileUtils.mkdir(staging_area) # mktmpdir tries to remove this directory
+          log "Download finished"
         end
       end
     end
@@ -129,6 +131,7 @@ module S3MetaSync
     end
 
     def verify_integrity!(staging_area, destination, changed, remote)
+      log "Verifying integrity of #{changed.size} files" if changed.size > 0
       local = md5_hash(staging_area, changed)
       corrupted = local.select { |file, md5| remote[file] != md5 }.map(&:first)
       return if corrupted.empty?
@@ -180,6 +183,7 @@ module S3MetaSync
     end
 
     def delete_local_files(local, paths)
+      log "Delete #{paths.size} local files" if paths.size > 0
       paths = paths.map { |path| "#{local}/#{path}" }
       paths.each { |path| log "Deleting #{path}" }
       FileUtils.rm_f(paths)
@@ -198,6 +202,7 @@ module S3MetaSync
     end
 
     def store_meta(source, meta)
+      log "Storing meta file"
       file = "#{source}/#{META_FILE}"
       FileUtils.mkdir_p(File.dirname(file))
       File.write(file, meta.to_yaml)
@@ -262,12 +267,14 @@ module S3MetaSync
           "https://s3#{"-#{region}" if region}.amazonaws.com/#{@bucket}/#{path}"
         end
       options = (@config[:ssl_none] ? {:ssl_verify_mode => OpenSSL::SSL::VERIFY_NONE} : {})
+      options[:open_timeout] = @config.fetch(:open_timeout, 5) # 5 seconds
+      options[:read_timeout] = @config.fetch(:read_timeout, 10) # 10 seconds
       retry_downloads(url: url) { open(url, options) }
     end
 
     def retry_downloads(url:)
       yield
-    rescue OpenURI::HTTPError, Errno::ECONNRESET => e
+    rescue OpenURI::HTTPError, Errno::ECONNRESET, Net::OpenTimeout, Net::ReadTimeout => e
       max_retries = @config[:max_retries] || 2
       http_error_retries ||= 0
       http_error_retries += 1
@@ -290,6 +297,7 @@ module S3MetaSync
     end
 
     def delete_empty_folders(destination)
+      log "Deleting empty folders"
       `find #{destination} -depth -empty -delete`
     end
 

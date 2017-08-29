@@ -39,6 +39,8 @@ module S3MetaSync
         opts.on("-s", "--secret SECRET", "AWS secret key") { |c| options[:secret] = c }
         opts.on("-r", "--region REGION", "AWS region if not us-standard") { |c| options[:region] = c }
         opts.on("-p", "--parallel COUNT", Integer, "Use COUNT threads for download/upload default: 10") { |c| options[:parallel] = c }
+        opts.on("-o", "--open-timeout TIMEOUT", Integer, "Net::HTTP open timeout in seconds default: 5") { |c| options[:open_timeout] = c }
+        opts.on("-t", "--read-timeout TIMEOUT", Integer, "Net::HTTP read timeout in seconds default: 10") { |c| options[:read_timeout] = c }
         opts.on("--ssl-none", "Do not verify ssl certs") { options[:ssl_none] = true }
         opts.on("-z", "--zip", "Zip when uploading to save bandwidth") { options[:zip] = true }
         opts.on("--no-local-changes", "Do not md5 all the local files, they did not change") { options[:no_local_changes] = true }
