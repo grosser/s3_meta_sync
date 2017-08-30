@@ -466,6 +466,14 @@ describe S3MetaSync do
     it "parses --retries" do
       expect(call(["x:z", "y", "--retries=5"])).to eq(["x:z", "y", defaults.merge(max_retries: 5)])
     end
+
+    it "parses --open-timeout" do
+      expect(call(["x:z", "y", "--open-timeout=3"])).to eq(["x:z", "y", defaults.merge(open_timeout: 3)])
+    end
+
+    it "parses --read-timeout" do
+      expect(call(["x:z", "y", "--read-timeout=7"])).to eq(["x:z", "y", defaults.merge(read_timeout: 7)])
+    end
   end
 
   describe ".download_content" do
@@ -581,6 +589,7 @@ describe S3MetaSync do
           OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 1/2
           OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 2/2
           Remote has no .s3-meta-sync, uploading everything
+          Storing meta file
           Uploading: 1 Deleting: 0
           Uploading xxx
           Uploading .s3-meta-sync
