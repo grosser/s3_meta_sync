@@ -1,3 +1,4 @@
+require "net/http"
 require "open-uri"
 require "yaml"
 require "digest/md5"
