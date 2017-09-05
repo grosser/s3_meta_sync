@@ -493,6 +493,18 @@ describe S3MetaSync do
       expect(syncer.send(:download_content, "bar/xxx").read).to eq("fff")
     end
 
+    it "retries once on net::http open timeout error" do
+      expect(syncer).to receive(:open).and_raise Net::OpenTimeout.new
+      expect(syncer).to receive(:open).and_return double(read: "fff")
+      expect(syncer.send(:download_content, "bar/xxx").read).to eq("fff")
+    end
+
+    it "retries once on net::http read timeout error" do
+      expect(syncer).to receive(:open).and_raise Net::ReadTimeout.new
+      expect(syncer).to receive(:open).and_return double(read: "fff")
+      expect(syncer.send(:download_content, "bar/xxx").read).to eq("fff")
+    end
+
     it "does not retry multiple times on ssl error" do
       expect(syncer).to receive(:open).exactly(2).and_raise OpenSSL::SSL::SSLError.new
       expect { syncer.send(:download_content, "bar/xxx") }.to raise_error(OpenSSL::SSL::SSLError)
