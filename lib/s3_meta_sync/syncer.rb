@@ -175,11 +175,15 @@ module S3MetaSync
     def delete_remote_files(remote, paths)
       paths.each { |path| log "Deleting #{@bucket}:#{remote}/#{path}" }
       if paths.any?
-        s3.delete_objects(
-          delete: { objects: paths.map { |path| {key: "#{remote}/#{path}"} } },
-          request_payer: "requester",
-          bucket: @bucket
-        )
+        # keys are limited to 1000 per request: http://docs.aws.amazon.com/sdkforruby/api/Aws/S3/Bucket.html#delete_objects-instance_method
+        paths.each_slice(1000) do |sliced_paths|
+          log "Sending request for #{sliced_paths.size} keys"
+          s3.delete_objects(
+            delete: { objects: sliced_paths.map { |path| {key: "#{remote}/#{path}"} } },
+            request_payer: "requester",
+            bucket: @bucket
+          )
+        end
       end
     end
 
