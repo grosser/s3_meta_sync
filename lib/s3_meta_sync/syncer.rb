@@ -6,7 +6,7 @@ require "fileutils"
 require "tmpdir"
 require "openssl"
 
-require "aws-sdk-core"
+require "aws-sdk-s3"
 require "s3_meta_sync/zip"
 
 module S3MetaSync
