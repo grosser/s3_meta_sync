@@ -195,7 +195,7 @@ module S3MetaSync
     end
 
     def s3
-      @s3 ||= ::Aws::S3::Client.new(
+      @s3 ||= Aws::S3::Client.new(
         access_key_id: @config[:key],
         secret_access_key: @config[:secret],
         region: @config[:region] || 'us-west-2'

@@ -12,15 +12,24 @@ describe S3MetaSync do
     result
   end
 
-  let(:config) { YAML.load_file(File.expand_path("../credentials.yml", __FILE__)) }
+  let(:key)    { config.fetch(:key) }
+  let(:secret) { config.fetch(:secret) }
+
+  let(:bucket) { config.fetch(:bucket) }
+  let(:region) { config.fetch(:region) }
+
+  let(:config) do
+    YAML.load_file(File.expand_path("../credentials.yml", __FILE__))
+  end
+
   let(:s3) do
-    ::Aws::S3::Client.new(
-      access_key_id: config[:key],
-      secret_access_key: config[:secret],
-      region: 'us-west-2'
+    Aws::S3::Client.new(
+      access_key_id: key,
+      secret_access_key: secret,
+      region: region
     )
   end
-  let(:bucket) { config[:bucket] }
+
   let(:foo_md5) do |variable|
     if RUBY_VERSION < '2.4.0'
       "---\n:files:\n  xxx: 0976fb571ada412514fe67273780c510\n"
@@ -37,17 +46,16 @@ describe S3MetaSync do
 
   def upload_simple_structure
     sh "mkdir foo && echo yyy > foo/xxx"
-    syncer.sync("foo", "#{config[:bucket]}:bar")
+    syncer.sync("foo", "#{bucket}:bar")
   end
 
   def download(file)
-    region = config[:region]
     region = if region && region != S3MetaSync::Syncer::DEFAULT_REGION
       "-#{region}"
     else
       nil
     end
-    open("https://s3#{region}.amazonaws.com/#{config[:bucket]}/#{file}").read
+    open("https://s3#{region}.amazonaws.com/#{bucket}/#{file}").read
   rescue
     nil
   end
@@ -105,7 +113,7 @@ describe S3MetaSync do
 
       it "removes obsolete files" do
         sh "rm foo/xxx && echo yyy > foo/zzz"
-        syncer.sync("foo", "#{config[:bucket]}:bar")
+        syncer.sync("foo", "#{bucket}:bar")
 
         expect(download("bar/xxx")).to be_nil
         expect(download("bar/zzz")).to eq("yyy\n")
@@ -115,7 +123,7 @@ describe S3MetaSync do
         expect(syncer).to receive(:upload_file).with("foo", ".s3-meta-sync", "bar")
         expect(syncer).not_to receive(:delete_remote_file)
 
-        syncer.sync("foo", "#{config[:bucket]}:bar")
+        syncer.sync("foo", "#{bucket}:bar")
       end
 
       it "force uploads files that are corrupted" do
@@ -125,13 +133,13 @@ describe S3MetaSync do
         # log corrupted files while downloading
         File.write("foo/xxx", "changed") # trigger a download
         expect {
-          syncer.sync("#{config[:bucket]}:bar", "foo")
+          syncer.sync("#{bucket}:bar", "foo")
         }.to raise_error(S3MetaSync::RemoteCorrupt)
         expect(File.read("foo/s3-meta-sync-corrupted.log")).to eq("xxx")
 
         # uploader should see the log and force a upload
         File.write("foo/xxx", old) # same md5 so normally would not upload
-        syncer.sync("foo", "#{config[:bucket]}:bar")
+        syncer.sync("foo", "#{bucket}:bar")
         expect(syncer.send(:download_content, "bar/xxx").read).to eq(old)
 
         # log got consumed
@@ -140,14 +148,14 @@ describe S3MetaSync do
 
       it "does upload files that were corrupt but no longer exist" do
         File.write("foo/s3-meta-sync-corrupted.log", "something")
-        syncer.sync("foo", "#{config[:bucket]}:bar")
+        syncer.sync("foo", "#{bucket}:bar")
       end
 
       it "has no server_side_encryption setting by default" do
         allow(syncer).to receive(:s3) { s3 }
         expect(s3).to receive(:put_object).with(hash_excluding(:server_side_encryption))
 
-        syncer.sync("foo", "#{config[:bucket]}:bar")
+        syncer.sync("foo", "#{bucket}:bar")
       end
 
       describe "with zip enabled" do
@@ -172,7 +180,7 @@ describe S3MetaSync do
           allow(syncer).to receive(:s3) { s3 }
           expect(s3).to receive(:put_object).with(hash_including(server_side_encryption: "AES256"))
 
-          syncer.sync("foo", "#{config[:bucket]}:bar")
+          syncer.sync("foo", "#{bucket}:bar")
         end
       end
     end
@@ -180,17 +188,17 @@ describe S3MetaSync do
     context "sync remote to local" do
       def self.it_downloads_into_an_empty_folder
         it "downloads into an empty folder" do
-          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+          no_cred_syncer.sync("#{bucket}:bar", "foo2")
           expect(File.read("foo2/xxx")).to eq("yyy\n")
           expect(File.read("foo2/.s3-meta-sync")).to eq(foo_md5)
         end
       end
 
-      let(:no_cred_syncer) { S3MetaSync::Syncer.new(region: config[:region], no_local_changes: config[:no_local_changes]) }
+      let(:no_cred_syncer) { S3MetaSync::Syncer.new(region: region, no_local_changes: config[:no_local_changes]) }
 
       it "fails when trying to download an empty folder (which would remove everything)" do
         expect {
-          no_cred_syncer.sync("#{config[:bucket]}:baz", "foo")
+          no_cred_syncer.sync("#{bucket}:baz", "foo")
         }.to raise_error(S3MetaSync::RemoteWithoutMeta)
       end
 
@@ -198,15 +206,18 @@ describe S3MetaSync do
         expect {
           expect(no_cred_syncer).to receive(:download_content).
             with(anything).exactly(2).
-            and_raise(OpenURI::HTTPError.new(1111, "Unable to download https://s3-us-west-2.amazonaws.com/s3-meta-sync/bar/.s3-meta-sync -- 404 Not Found"))
-          no_cred_syncer.sync("#{config[:bucket]}:baz", "foo")
+            and_raise(OpenURI::HTTPError.new(
+              1111,
+              "Unable to download https://#{region}.amazonaws.com/s3-meta-sync/bar/.s3-meta-sync -- 404 Not Found"
+            ))
+          no_cred_syncer.sync("#{bucket}:baz", "foo")
         }.to raise_error(S3MetaSync::RemoteWithoutMeta)
       end
 
       it_downloads_into_an_empty_folder
 
       it "downloads into an absolute folder" do
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "#{Dir.pwd}/foo2")
+        no_cred_syncer.sync("#{bucket}:bar", "#{Dir.pwd}/foo2")
         expect(File.read("foo2/xxx")).to eq("yyy\n")
         expect(File.read("foo2/.s3-meta-sync")).to eq(foo_md5)
       end
@@ -215,7 +226,7 @@ describe S3MetaSync do
         dir = File.dirname(Dir.mktmpdir)
         before = Dir["#{dir}/*"].size
 
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        no_cred_syncer.sync("#{bucket}:bar", "foo2")
         after = Dir["#{dir}/*"].size
 
         expect(after).to eq(before)
@@ -226,7 +237,7 @@ describe S3MetaSync do
         path = File.join(Dir.tmpdir, S3MetaSync::Syncer::STAGING_AREA_PREFIX + '*')
         before = Dir[path].size
 
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        no_cred_syncer.sync("#{bucket}:bar", "foo2")
         after = Dir[path].size
 
         expect(after).to eq(before)
@@ -242,7 +253,7 @@ describe S3MetaSync do
         ctime = Time.at(Time.now.utc - 25 * 60 * 60)
         allow(File).to receive(:ctime).with(dir).and_return(ctime)
 
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        no_cred_syncer.sync("#{bucket}:bar", "foo2")
         after = Dir[path].size
 
         expect(after).to eq(before - 1)
@@ -252,12 +263,12 @@ describe S3MetaSync do
         expect(no_cred_syncer).not_to receive(:download_file)
         expect(no_cred_syncer).not_to receive(:delete_local_files)
 
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.sync("#{bucket}:bar", "foo")
       end
 
       it "deletes obsolete local files" do
         sh "echo yyy > foo/zzz"
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.sync("#{bucket}:bar", "foo")
 
         expect(File.exist?("foo/zzz")).to be false
       end
@@ -265,19 +276,19 @@ describe S3MetaSync do
       it "removes empty folders" do
         sh "mkdir foo/baz"
         sh "echo dssdf > foo/baz/will_be_deleted"
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.sync("#{bucket}:bar", "foo")
 
         expect(File.exist?("foo/baz")).to be false
       end
 
       it "does not fail when local files that no longer exist are mentioned in local .s3-meta-sync" do
         File.open('foo/.s3-meta-sync', 'a+') { |f| f.puts "  gone: 1976fb571ada412514fe67273780c510\n  nested/gone: 2976fb571ada412514fe67273780c510" }
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.sync("#{bucket}:bar", "foo")
       end
 
       it "overwrites locally changed files" do
         sh "echo fff > foo/xxx"
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+        no_cred_syncer.sync("#{bucket}:bar", "foo")
 
         expect(File.read("foo/xxx")).to eq("yyy\n")
       end
@@ -292,7 +303,7 @@ describe S3MetaSync do
 
         # does not override
         expect {
-          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+          no_cred_syncer.sync("#{bucket}:bar", "foo2")
         }.to raise_error S3MetaSync::RemoteCorrupt
 
         expect(File.read("foo2/xxx")).to eq("old")
@@ -301,7 +312,7 @@ describe S3MetaSync do
       it "does not consider additional files on s3 as corrupted" do
         upload "yyy", "not-tracked"
         File.unlink("foo/yyy")
-        syncer.sync("#{config[:bucket]}:bar", "foo")
+        syncer.sync("#{bucket}:bar", "foo")
 
         expect(File.exist?("foo/yyy")).to be false
       end
@@ -309,7 +320,7 @@ describe S3MetaSync do
       it "does download from remote with old .s3-meta-sync format" do
         old_format = "---\nxxx: 0976fb571ada412514fe67273780c510\n"
         upload(".s3-meta-sync", old_format)
-        no_cred_syncer.sync("#{config[:bucket]}:bar", "foo2")
+        no_cred_syncer.sync("#{bucket}:bar", "foo2")
 
         expect(File.read("foo2/xxx")).to eq("yyy\n")
         expect(File.read("foo2/.s3-meta-sync")).to eq(foo_md5)
@@ -322,21 +333,21 @@ describe S3MetaSync do
         end
 
         it "does not re-check local files for changes" do
-          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+          no_cred_syncer.sync("#{bucket}:bar", "foo")
 
           expect(File.read("foo/xxx")).to eq("fff\n")
         end
 
         it "does not fail when unneeded local files for do not exist" do
           File.open('foo/.s3-meta-sync', 'a+') { |f| f.puts "  gone: 1976fb571ada412514fe67273780c510\n  nested/gone: 2976fb571ada412514fe67273780c510" }
-          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+          no_cred_syncer.sync("#{bucket}:bar", "foo")
 
           expect(File.read("foo/xxx")).to eq("fff\n")
         end
 
         it "downloads with old .s3-meta-sync format" do
           File.write('foo/.s3-meta-sync', YAML.dump(YAML.load(foo_md5).fetch(:files))) # old format had just files in an array
-          no_cred_syncer.sync("#{config[:bucket]}:bar", "foo")
+          no_cred_syncer.sync("#{bucket}:bar", "foo")
 
           expect(File.read("foo/xxx")).to eq("fff\n")
         end
@@ -381,7 +392,7 @@ describe S3MetaSync do
 
   it "can upload and download a utf-8 file" do
     with_utf8_encoding do
-      syncer.instance_variable_set(:@bucket, config[:bucket])
+      syncer.instance_variable_set(:@bucket, bucket)
       expected = "…"
       sh "mkdir foo"
       File.write("foo/utf8", expected)
@@ -563,7 +574,7 @@ describe S3MetaSync do
   end
 
   describe "CLI" do
-    let(:params) { "--key #{config[:key]} --secret #{config[:secret]} --region #{config[:region]}" }
+    let(:params) { "--key #{key} --secret #{secret} --region #{region}" }
     def sync(command, options={})
       sh("#{Bundler.root}/bin/s3-meta-sync #{command}", options)
     end
@@ -577,6 +588,13 @@ describe S3MetaSync do
     end
 
     context "upload" do
+      let(:new_bucket) { "#{bucket}:bar" }
+      let(:bucket_url) do
+        subdomain = (region == S3MetaSync::Syncer::DEFAULT_REGION ? "s3" : "s3-#{region}")
+
+        "https://#{subdomain}.amazonaws.com/#{bucket}/bar/.s3-meta-sync"
+      end
+
       around do |test|
         begin
           sh "mkdir foo && echo yyy > foo/xxx"
@@ -587,19 +605,20 @@ describe S3MetaSync do
       end
 
       it "works" do
-        expect(sync("foo #{config[:bucket]}:bar #{params}")).to eq("Remote has no .s3-meta-sync, uploading everything\nUploading: 1 Deleting: 0\n")
+        expect(sync("foo #{new_bucket} #{params}")).to eq("Remote has no .s3-meta-sync, uploading everything\nUploading: 1 Deleting: 0\n")
         expect(download("bar/xxx")).to eq("yyy\n")
       end
 
       it "is verbose" do
-        result = sync("foo #{config[:bucket]}:bar #{params} --verbose").strip
+        RSpec::Support::ObjectFormatter.default_instance.max_formatted_output_length = 1000
+        result = sync("foo #{new_bucket} #{params} --verbose").strip
         expect(result).to eq <<-TXT.gsub(/^ {10}/, "").strip
           Downloading bar/.s3-meta-sync
-          OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 1/2
-          OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 2/2
+          OpenURI::HTTPError error downloading #{bucket_url}, retrying 1/2
+          OpenURI::HTTPError error downloading #{bucket_url}, retrying 2/2
           Downloading bar/.s3-meta-sync
-          OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 1/2
-          OpenURI::HTTPError error downloading https://s3-us-west-2.amazonaws.com/s3-meta-sync-test/bar/.s3-meta-sync, retrying 2/2
+          OpenURI::HTTPError error downloading #{bucket_url}, retrying 1/2
+          OpenURI::HTTPError error downloading #{bucket_url}, retrying 2/2
           Remote has no .s3-meta-sync, uploading everything
           Storing meta file
           Uploading: 1 Deleting: 0
