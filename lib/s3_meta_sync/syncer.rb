@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "net/http"
 require "open-uri"
 require "yaml"
@@ -287,8 +289,7 @@ module S3MetaSync
         log "#{e.class} error downloading #{url}, retrying #{http_error_retries}/#{max_retries}"
         retry
       else
-        $!.message << " -- while trying to download #{url}"
-        raise
+        raise $!, "#{$!.message} -- while trying to download #{url}"
       end
     rescue OpenSSL::SSL::SSLError
       ssl_error_retries ||= 0
