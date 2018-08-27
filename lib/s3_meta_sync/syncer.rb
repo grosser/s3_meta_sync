@@ -232,12 +232,15 @@ module S3MetaSync
 
     def read_meta(source)
       file = "#{source}/#{META_FILE}"
-      parse_yaml_content(File.read(file)) unless File.zero?(file)
+      if File.exist?(file)
+        content = File.read(file)
+        parse_yaml_content(content) if content.size > 0
+      end
     end
 
     def download_meta(destination)
       content = download_content("#{destination}/#{META_FILE}") { |io| io.read }
-      raise RemoteWithoutMeta unless content.size > 0
+      raise OpenURI::HTTPError.new('Content is empty', nil) unless content.size > 0
 
       parse_yaml_content(content)
     rescue OpenURI::HTTPError
