@@ -216,6 +216,16 @@ describe S3MetaSync do
         }.to raise_error(S3MetaSync::RemoteWithoutMeta)
       end
 
+      it "fails when .s3-meta-sync is corrupted" do
+        expect {
+          expect(no_cred_syncer).to receive(:download_content).
+            exactly(2).
+            and_return(StringIO.new)
+
+          no_cred_syncer.sync("#{bucket}:bar", "foo")
+        }.to raise_error(S3MetaSync::RemoteWithoutMeta)
+      end
+
       it_downloads_into_an_empty_folder
 
       it "downloads into an absolute folder" do
@@ -352,6 +362,22 @@ describe S3MetaSync do
           no_cred_syncer.sync("#{bucket}:bar", "foo")
 
           expect(File.read("foo/xxx")).to eq("fff\n")
+        end
+
+        it "does not fail if .s3-meta-sync does not exist" do
+          File.delete("foo/.s3-meta-sync")
+          no_cred_syncer.sync("#{bucket}:bar", "foo")
+
+          # no .s3-meta-sync forces a re-download
+          expect(File.read("foo/xxx")).to eq("yyy\n")
+        end
+
+        it "ignores corrupted .s3-meta-sync" do
+          File.write("foo/.s3-meta-sync", "")
+          no_cred_syncer.sync("#{bucket}:bar", "foo")
+
+          # no .s3-meta-sync forces a re-download
+          expect(File.read("foo/xxx")).to eq("yyy\n")
         end
       end
 
