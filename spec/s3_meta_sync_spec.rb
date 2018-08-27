@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "spec_helper"
 
 SingleCov.covered! uncovered: 3 # .run is covered via CLI tests, but does not report coverage
@@ -40,8 +42,8 @@ describe S3MetaSync do
   let(:syncer) { S3MetaSync::Syncer.new(config) }
 
   def cleanup_s3
-    keys = s3.list_objects(bucket: bucket).contents.map { |o| {key: o.key} }
-    s3.delete_objects(bucket: bucket, delete: {objects: keys})
+    keys = s3.list_objects(bucket: bucket).contents.map { |o| { key: o.key } }
+    keys.each_slice(1000) { |sliced_keys| s3.delete_objects(bucket: bucket, delete: { objects: sliced_keys }) }
   end
 
   def upload_simple_structure
@@ -50,12 +52,12 @@ describe S3MetaSync do
   end
 
   def download(file)
-    region = if region && region != S3MetaSync::Syncer::DEFAULT_REGION
+    region_suffix = if region && region != S3MetaSync::Syncer::DEFAULT_REGION
       "-#{region}"
     else
       nil
     end
-    open("https://s3#{region}.amazonaws.com/#{bucket}/#{file}").read
+    open("https://s3#{region_suffix}.amazonaws.com/#{bucket}/#{file}").read
   rescue
     nil
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "optparse"
 require "s3_meta_sync/version"
 require "s3_meta_sync/syncer"
