@@ -7,6 +7,7 @@ require "digest/md5"
 require "fileutils"
 require "tmpdir"
 require "openssl"
+require 'mime/types'
 
 require "aws-sdk-s3"
 require "s3_meta_sync/zip"
@@ -16,7 +17,12 @@ module S3MetaSync
     DEFAULT_REGION = 'us-east-1'
     STAGING_AREA_PREFIX = "s3ms_"
 
+    AWS_PUBLIC_ACCESS  = 'public-read'
+    AWS_PRIVATE_ACCESS = 'private'
+
     def initialize(config)
+      config[:acl] ||= AWS_PUBLIC_ACCESS
+
       @config = config
     end
 
@@ -163,10 +169,12 @@ module S3MetaSync
       content = Zip.zip(content) if @config[:zip] && path != META_FILE
 
       object = {
+        acl: @config[:acl],
         bucket: @bucket,
         body: content,
-        key: "#{destination}/#{path}",
-        acl: 'public-read'
+        content_encoding: content.encoding.to_s,
+        content_type: MIME::Types.of(path).first.to_s,
+        key: "#{destination}/#{path}"
       }
 
       object[:server_side_encryption] = @config[:server_side_encryption] if @config[:server_side_encryption]
@@ -197,11 +205,19 @@ module S3MetaSync
     end
 
     def s3
-      @s3 ||= Aws::S3::Client.new(
-        access_key_id: @config[:key],
-        secret_access_key: @config[:secret],
-        region: @config[:region] || 'us-west-2'
-      )
+      @s3 ||= begin
+        config = { region: @config[:region] || DEFAULT_REGION }
+
+        if @config[:credentials_path] && File.exist?(@config[:credentials_path])
+          config[:credentials] = Aws::SharedCredentials.new(path: @config[:credentials_path], profile_name: 'default')
+        else
+          config[:access_key_id] = @config[:key]
+          config[:secret_access_key] = @config[:secret]
+          config[:session_token] = @config[:session_token] if @config[:session_token]
+        end
+
+        Aws::S3::Client.new(config)
+      end
     end
 
     def generate_meta(source)
@@ -239,19 +255,44 @@ module S3MetaSync
     end
 
     def download_meta(destination)
+      if @config[:acl] == AWS_PRIVATE_ACCESS
+        private_access_download_meta(destination)
+      else
+        public_access_download_meta(destination)
+      end
+    end
+
+    def private_access_download_meta(destination)
+      object = s3.get_object(bucket: @bucket, key: "#{destination}/#{META_FILE}")
+      content = object.body.string
+
+      raise S3MetaSync::RemoteWithoutMeta if content.empty? # if missing, upload everything
+
+      parse_yaml_content(content)
+    rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::AccessDenied # if requesting a file that doesn't exist AccessDenied is raised
+      retries ||= 0
+
+      raise S3MetaSync::RemoteWithoutMeta unless retries < 1
+
+      retries += 1
+      sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
+      retry
+    end
+
+    def public_access_download_meta(destination)
       content = download_content("#{destination}/#{META_FILE}") { |io| io.read }
+
       raise OpenURI::HTTPError.new('Content is empty', nil) unless content.size > 0
 
       parse_yaml_content(content)
     rescue OpenURI::HTTPError
       retries ||= 0
+
+      raise S3MetaSync::RemoteWithoutMeta unless retries < 1
+
       retries += 1
-      if retries <= 1
-        sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
-        retry
-      else
-        raise RemoteWithoutMeta
-      end
+      sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
+      retry
     end
 
     def parse_yaml_content(content)
@@ -260,14 +301,27 @@ module S3MetaSync
     end
 
     def download_file(source, path, destination, zip)
-      download = download_content("#{source}/#{path}") # warning: using block form consumes more ram
-      download = Zip.unzip(download) if zip
-      path = "#{destination}/#{path}"
-      FileUtils.mkdir_p(File.dirname(path))
+      download = if @config[:acl] == AWS_PRIVATE_ACCESS
+        private_content_download(source, path)
+      else
+        public_content_download(source, path)
+      end
+
+      download = S3MetaSync::Zip.unzip(download) if zip
+      FileUtils.mkdir_p(File.dirname("#{destination}/#{path}"))
 
       # consumes less ram then File.write(path, content), possibly also faster
-      File.open(path, 'wb') { |f| IO.copy_stream(download, f) }
+      File.open("#{destination}/#{path}", 'wb') { |f| IO.copy_stream(download, f) }
       download.close
+    end
+
+    def private_content_download(source, path)
+      obj = s3.get_object(bucket: @bucket, key: "#{source}/#{path}")
+      obj.body
+    end
+
+    def public_content_download(source, path)
+      download_content("#{source}/#{path}") # warning: using block form consumes more ram
     end
 
     def download_content(path)

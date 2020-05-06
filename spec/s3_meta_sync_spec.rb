@@ -76,6 +76,8 @@ describe S3MetaSync do
     expect(syncer.send(:download_content, "bar/#{file}").read).to eq(content)
   end
 
+  before { allow($stderr).to receive(:puts) }
+
   around do |test|
     Dir.mktmpdir do |dir|
       Dir.chdir(dir, &test)
@@ -101,10 +103,8 @@ describe S3MetaSync do
   end
 
   describe "#sync" do
-    before do
-      allow($stderr).to receive(:puts)
-      upload_simple_structure
-    end
+    before { upload_simple_structure }
+
     after { cleanup_s3 }
 
     context "sync local to remote" do
@@ -653,6 +653,92 @@ describe S3MetaSync do
           Uploading xxx
           Uploading .s3-meta-sync
         TXT
+      end
+    end
+  end
+
+  describe "private S3 objects" do
+    let(:private_acl) { 'private' }
+    let(:bar_md5) { "---\n:files:\n  xxx: f5271ace09a56600e1cef7663d932807\n" }
+
+    def syncer
+      config[:acl] = private_acl
+      S3MetaSync::Syncer.new(config)
+    end
+
+    def upload_simple_structure
+      sh "mkdir foo && echo こんにちは > foo/xxx"
+      syncer.sync("foo", "#{bucket}:bar")
+    end
+
+    def download_private(file)
+      s3.get_object(bucket: bucket, key: file)
+    end
+
+    before { upload_simple_structure }
+
+    after { cleanup_s3 }
+
+    it "uploads files" do
+      expect(download_private("bar/xxx").body.read).to eq("こんにちは\n")
+      expect(download_private("bar/.s3-meta-sync").body.read).to eq(bar_md5)
+    end
+
+    it "uploads file to S3" do
+      expect { download_private("boo/xxx") }.to raise_error(Aws::S3::Errors::NoSuchKey)
+
+      syncer.sync("foo", "#{bucket}:boo")
+
+      expect(download_private("boo/xxx").body.read).to eq("こんにちは\n")
+    end
+
+    it "downloads from S3 bucket" do
+      expect(File.exists?("boo/xxx")).to be false
+
+      syncer.sync("#{bucket}:bar", "boo")
+
+      expect(File.exists?("boo/xxx")).to be true
+    end
+
+    it "sets content encoding" do
+      sh "mkdir baz && echo さようなら > baz/japanese"
+      syncer.sync("baz", "#{bucket}:baz")
+
+      expect(download_private("baz/japanese").content_encoding).to eq("UTF-8")
+    end
+
+    it "sets content type" do
+      sh "mkdir baz && echo こんにちは > baz/japanese.json"
+      syncer.sync("baz", "#{bucket}:baz")
+
+      expect(download_private("baz/japanese.json").content_type).to eq("application/json")
+    end
+
+    context "using aws credentials file" do
+      def write_credentials_file
+        FileUtils.mkdir_p("aws")
+        File.write("aws/credentials", "[default]\naws_access_key_id=#{key}\naws_secret_access_key=#{secret}")
+      end
+
+      def syncer
+        write_credentials_file
+
+        config[:acl] = private_acl
+        config[:credentials_path] = "aws/credentials"
+
+        S3MetaSync::Syncer.new(config)
+      end
+
+      it "uploads to S3" do
+        expect { download_private("boo/xxx") }.to raise_error(Aws::S3::Errors::NoSuchKey)
+        syncer.sync("foo", "#{bucket}:boo")
+        expect(download_private("boo/xxx").body.read).to eq("こんにちは\n")
+      end
+
+      it "downloads from S3 bucket" do
+        expect(File.exists?("boo/xxx")).to be false
+        syncer.sync("#{bucket}:bar", "boo")
+        expect(File.exists?("boo/xxx")).to be true
       end
     end
   end
