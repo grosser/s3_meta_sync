@@ -567,7 +567,9 @@ describe S3MetaSync do
     end
 
     describe "with retries option" do
-      before { config[:max_retries] = 3 }
+      def config
+        super.merge(max_retries: 3)
+      end
 
       it "retries more than 3 times on a HTTP error" do
         expect(syncer).to receive(:open).exactly(4).and_raise OpenURI::HTTPError.new('http error', nil)

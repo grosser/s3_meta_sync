@@ -7,23 +7,24 @@ require "digest/md5"
 require "fileutils"
 require "tmpdir"
 require "openssl"
-require 'mime/types'
+require "mime/types"
 
 require "aws-sdk-s3"
 require "s3_meta_sync/zip"
 
 module S3MetaSync
   class Syncer
-    DEFAULT_REGION = 'us-east-1'
+    DEFAULT_REGION = "us-east-1"
     STAGING_AREA_PREFIX = "s3ms_"
 
-    AWS_PUBLIC_ACCESS  = 'public-read'
-    AWS_PRIVATE_ACCESS = 'private'
+    AWS_PUBLIC_ACCESS = "public-read"
+    AWS_PRIVATE_ACCESS = "private"
 
     def initialize(config)
-      config[:acl] ||= AWS_PUBLIC_ACCESS
-
-      @config = config
+      @config = {
+        acl: AWS_PUBLIC_ACCESS,
+        region: DEFAULT_REGION
+      }.merge(config)
     end
 
     def sync(source, destination)
@@ -101,7 +102,7 @@ module S3MetaSync
     # Sometimes SIGTERM causes Dir.mktmpdir to not properly delete the temp folder
     # Remove 1 day old folders
     def delete_old_temp_folders
-      path = File.join(Dir.tmpdir, STAGING_AREA_PREFIX + '*')
+      path = File.join(Dir.tmpdir, STAGING_AREA_PREFIX + "*")
 
       day = 24 * 60 * 60
       dirs = Dir.glob(path)
@@ -206,10 +207,10 @@ module S3MetaSync
 
     def s3
       @s3 ||= begin
-        config = { region: @config[:region] || DEFAULT_REGION }
+        config = { region: @config[:region] }
 
-        if @config[:credentials_path] && File.exist?(@config[:credentials_path])
-          config[:credentials] = Aws::SharedCredentials.new(path: @config[:credentials_path], profile_name: 'default')
+        if @config[:credentials_path]
+          config[:credentials] = Aws::SharedCredentials.new(path: @config[:credentials_path], profile_name: "default")
         else
           config[:access_key_id] = @config[:key]
           config[:secret_access_key] = @config[:secret]
@@ -255,7 +256,7 @@ module S3MetaSync
     end
 
     def download_meta(destination)
-      if @config[:acl] == AWS_PRIVATE_ACCESS
+      if private?
         private_access_download_meta(destination)
       else
         public_access_download_meta(destination)
@@ -263,8 +264,7 @@ module S3MetaSync
     end
 
     def private_access_download_meta(destination)
-      object = s3.get_object(bucket: @bucket, key: "#{destination}/#{META_FILE}")
-      content = object.body.string
+      content = private_content_download(destination, META_FILE).string
 
       raise S3MetaSync::RemoteWithoutMeta if content.empty? # if missing, upload everything
 
@@ -272,7 +272,7 @@ module S3MetaSync
     rescue Aws::S3::Errors::NoSuchKey, Aws::S3::Errors::AccessDenied # if requesting a file that doesn't exist AccessDenied is raised
       retries ||= 0
 
-      raise S3MetaSync::RemoteWithoutMeta unless retries < 1
+      raise S3MetaSync::RemoteWithoutMeta if retries >= 1
 
       retries += 1
       sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
@@ -282,13 +282,13 @@ module S3MetaSync
     def public_access_download_meta(destination)
       content = download_content("#{destination}/#{META_FILE}") { |io| io.read }
 
-      raise OpenURI::HTTPError.new('Content is empty', nil) unless content.size > 0
+      raise OpenURI::HTTPError.new("Content is empty", nil) if content.size == 0
 
       parse_yaml_content(content)
     rescue OpenURI::HTTPError
       retries ||= 0
 
-      raise S3MetaSync::RemoteWithoutMeta unless retries < 1
+      raise S3MetaSync::RemoteWithoutMeta if retries >= 1
 
       retries += 1
       sleep 1 # maybe the remote meta was just updated ... give aws a second chance ...
@@ -301,7 +301,7 @@ module S3MetaSync
     end
 
     def download_file(source, path, destination, zip)
-      download = if @config[:acl] == AWS_PRIVATE_ACCESS
+      download = if private?
         private_content_download(source, path)
       else
         public_content_download(source, path)
@@ -311,7 +311,7 @@ module S3MetaSync
       FileUtils.mkdir_p(File.dirname("#{destination}/#{path}"))
 
       # consumes less ram then File.write(path, content), possibly also faster
-      File.open("#{destination}/#{path}", 'wb') { |f| IO.copy_stream(download, f) }
+      File.open("#{destination}/#{path}", "wb") { |f| IO.copy_stream(download, f) }
       download.close
     end
 
@@ -399,6 +399,10 @@ module S3MetaSync
 
     def log(text, important=false)
       $stderr.puts text if @config[:verbose] or important
+    end
+
+    def private?
+      @config[:acl] == AWS_PRIVATE_ACCESS
     end
   end
 end
