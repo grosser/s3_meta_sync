@@ -38,6 +38,8 @@ If a downloaded file is does not match it's md5 sum in .s3-meta-sync, the whole 
     -v, --version                    Show Version
 ```
 
+Using the [ruby api](https://github.com/grosser/s3_meta_sync/pull/25/files) `credentials_path` and `acl` are also supported to allow up/download via private api buckets. (TODO: turn into cli options)
+
 ## Production setup example
 
 Upload:
