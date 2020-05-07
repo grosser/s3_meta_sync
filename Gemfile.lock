@@ -64,6 +64,3 @@ DEPENDENCIES
   s3_meta_sync!
   single_cov
   stub_server
-
-BUNDLED WITH
-   1.17.3
