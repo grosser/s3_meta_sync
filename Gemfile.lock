@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    s3_meta_sync (0.14.1)
+    s3_meta_sync (0.15.0)
       aws-sdk-s3 (~> 1.0)
 
 GEM
