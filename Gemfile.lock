@@ -1,8 +1,9 @@
 PATH
   remote: .
   specs:
-    s3_meta_sync (0.15.0)
+    s3_meta_sync (0.15.1)
       aws-sdk-s3 (~> 1.0)
+      mime-types
 
 GEM
   remote: https://rubygems.org/
@@ -64,3 +65,6 @@ DEPENDENCIES
   s3_meta_sync!
   single_cov
   stub_server
+
+BUNDLED WITH
+   2.1.4
