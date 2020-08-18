@@ -9,5 +9,6 @@ Gem::Specification.new name, S3MetaSync::VERSION do |s|
   s.files = `git ls-files lib/ bin/`.split("\n")
   s.license = "MIT"
   s.add_runtime_dependency "aws-sdk-s3", '~> 1.0'
+  s.add_runtime_dependency "mime-types"
   s.executables = ["s3-meta-sync"]
 end
