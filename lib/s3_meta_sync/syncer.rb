@@ -316,6 +316,7 @@ module S3MetaSync
     end
 
     def private_content_download(source, path)
+      log "Downloading #{path}"
       obj = s3.get_object(bucket: @bucket, key: "#{source}/#{path}")
       obj.body
     end
